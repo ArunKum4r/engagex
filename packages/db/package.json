@@ -1,0 +1,38 @@
+{
+  "name": "@engagex/db",
+  "version": "1.0.0",
+  "private": true,
+  "description": "EngageX database package",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "main": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
+    "build": "tsc",
+    "db:test": "tsx src/test-connection.ts",
+    "db:seed:entitlements": "tsx src/seed/subscription-entitlements.ts",
+    "db:seed:plans": "tsx src/seed/subscription-plans.ts",
+    "seed:admin-rbac": "tsx src/seed/admin-rbac.ts"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "drizzle-orm": "^0.45.2",
+    "postgres": "^3.4.9"
+  },
+  "devDependencies": {
+    "@types/node": "^26.4.0",
+    "drizzle-kit": "^0.31.10",
+    "tsx": "^4.23.12",
+    "typescript": "^5.9.3"
+  }
+}

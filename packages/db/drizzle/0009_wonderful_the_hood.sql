@@ -1,0 +1,1 @@
+ALTER TABLE "automation_steps" ADD COLUMN "canvas_position" jsonb DEFAULT '{"x":0,"y":0}'::jsonb NOT NULL;

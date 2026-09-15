@@ -1,0 +1,1 @@
+ALTER TABLE "automation_triggers" ADD COLUMN "entry_step_id" uuid;

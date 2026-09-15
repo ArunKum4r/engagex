@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:17
+    container_name: engagex-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: engagex
+      POSTGRES_PASSWORD: engagex_dev
+      POSTGRES_DB: engagex
+    ports:
+      - "5433:5432"
+    volumes:
+      - engagex-postgres-data:/var/lib/postgresql/data
+
+volumes:
+  engagex-postgres-data:
