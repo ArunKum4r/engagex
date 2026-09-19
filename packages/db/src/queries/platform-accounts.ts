@@ -1,6 +1,7 @@
 import { eq, and } from "drizzle-orm";
 import { db } from "../client.js";
 import { platformAccounts } from "../schema/platform-accounts.js";
+import { platforms } from "../schema/platforms.js";
 
 export async function createPlatformAccount(data: {
     workspaceId: string;
@@ -140,6 +141,26 @@ export async function deletePlatformAccount(platformAccountId: string) {
             ),
         )
         .returning();
+
+    return result[0] ?? null;
+}
+
+export async function findPlatformAccountWithPlatform(workspaceId: string, platformAccountId: string) {
+    const result = await db
+        .select({
+            account: platformAccounts,
+            platform: platforms,
+        })
+        .from(platformAccounts)
+        .leftJoin(
+            platforms,
+            eq(platformAccounts.platformId, platforms.id),
+        )
+        .where(and(
+            eq(platformAccounts.workspaceId, workspaceId),
+            eq(platformAccounts.id, platformAccountId),
+        ))
+        .limit(1);
 
     return result[0] ?? null;
 }

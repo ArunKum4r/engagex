@@ -124,6 +124,7 @@ export class IntegrationService {
         id: string;
         workspaceId: string;
         platform: string;
+        platformId: string | null;
         externalAccountId: string;
         name: string | null;
         username: string | null;
@@ -136,6 +137,7 @@ export class IntegrationService {
             id: account.id,
             workspaceId: account.workspaceId,
             platform: account.platform,
+            platformId: account.platformId,
             externalAccountId:
                 account.externalAccountId,
             name: account.name,

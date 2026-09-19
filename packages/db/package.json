@@ -22,7 +22,8 @@
     "db:test": "tsx src/test-connection.ts",
     "db:seed:entitlements": "tsx src/seed/subscription-entitlements.ts",
     "db:seed:plans": "tsx src/seed/subscription-plans.ts",
-    "seed:admin-rbac": "tsx src/seed/admin-rbac.ts"
+    "seed:admin-rbac": "tsx src/seed/admin-rbac.ts",
+    "db:seed:platform": "tsx src/seed/platform.ts"
   },
   "dependencies": {
     "dotenv": "^17.4.2",

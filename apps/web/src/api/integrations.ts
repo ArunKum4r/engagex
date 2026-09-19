@@ -4,6 +4,7 @@ export interface PlatformAccount {
     id: string;
     workspaceId: string;
     platform: string;
+    platformId: string | null;
     externalAccountId: string;
     name: string | null;
     username: string | null;

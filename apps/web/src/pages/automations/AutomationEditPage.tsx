@@ -41,8 +41,8 @@ const AutomationEditPage = () => {
     }
 
     return (
-        <div className="space-y-4">
-            <div className="flex items-center justify-between gap-4">
+        <div className="space-y-4 sm:space-y-5">
+            <div className="flex flex-col items-stretch justify-between gap-3 sm:flex-row sm:items-center sm:gap-4">
                 <div className="flex min-w-0 items-center gap-3">
                     <button
                         type="button"
@@ -51,7 +51,7 @@ const AutomationEditPage = () => {
                                 `/automations/${automationId}`,
                             )
                         }
-                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border text-text-secondary transition-colors hover:bg-surface-muted hover:text-text"
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border text-text-secondary transition-colors hover:bg-surface-muted hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                         aria-label="Back to automation"
                     >
                         <ArrowLeft
@@ -70,7 +70,7 @@ const AutomationEditPage = () => {
                     </div>
                 </div>
 
-                <div className="flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-xs text-text-secondary">
+                <div className="flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-xs text-text-secondary sm:w-auto">
                     <Check
                         size={14}
                         className="text-success"
