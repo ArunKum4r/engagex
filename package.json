@@ -1,5 +1,5 @@
 {
-	"name": "engagex",
-	"private": true,
-	"packageManager": "pnpm@10.24.0"
+  "name": "engagex",
+  "private": true,
+  "packageManager": "pnpm@10.24.0"
 }
