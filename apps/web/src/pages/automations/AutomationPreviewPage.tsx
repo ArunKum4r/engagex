@@ -104,10 +104,10 @@ const AutomationPreviewPage = () => {
         );
 
     return (
-        <div className="space-y-5">
+        <div className="space-y-5 sm:space-y-6">
             <Link
                 to={`/automations/${automationId}`}
-                className="inline-flex items-center gap-2 text-sm text-text-secondary hover:text-text"
+                className="inline-flex items-center gap-2 text-sm text-text-secondary transition-colors hover:text-text"
             >
                 <ArrowLeft
                     size={16}
@@ -115,7 +115,7 @@ const AutomationPreviewPage = () => {
                 Back to automation
             </Link>
 
-            <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+            <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center sm:gap-4">
                 <div>
                     <p className="text-xs text-text-secondary">
                         Preview
@@ -129,7 +129,7 @@ const AutomationPreviewPage = () => {
                     </h1>
                 </div>
 
-                <div className="flex rounded-xl border border-border bg-surface p-1">
+                <div className="flex w-full rounded-xl border border-border bg-surface p-1 sm:w-auto">
                     <button
                         type="button"
                         onClick={() =>
@@ -138,7 +138,7 @@ const AutomationPreviewPage = () => {
                             )
                         }
                         className={[
-                            "rounded-lg px-4 py-2 text-sm font-medium",
+                            "flex-1 rounded-lg px-3 py-2 text-sm font-medium sm:flex-none sm:px-4",
                             mode ===
                             "workflow"
                                 ? "bg-surface-muted text-text shadow-sm"
@@ -158,7 +158,7 @@ const AutomationPreviewPage = () => {
                             )
                         }
                         className={[
-                            "rounded-lg px-4 py-2 text-sm font-medium",
+                            "flex-1 rounded-lg px-3 py-2 text-sm font-medium sm:flex-none sm:px-4",
                             mode ===
                             "mobile"
                                 ? "bg-surface-muted text-text shadow-sm"
@@ -174,8 +174,8 @@ const AutomationPreviewPage = () => {
 
             {mode ===
             "workflow" ? (
-                <div className="rounded-2xl border border-border bg-surface p-8">
-                    <div className="mx-auto flex max-w-[520px] flex-col items-center">
+                <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm sm:p-8">
+                    <div className="mx-auto flex w-full max-w-[560px] flex-col items-center">
                         {trigger && (
                             <PreviewCard
                                 category="Trigger"
@@ -315,9 +315,9 @@ const MobilePreview = ({
     }>;
 }) => {
     return (
-        <div className="flex min-h-[680px] items-center justify-center rounded-2xl border border-border bg-surface p-8">
-            <div className="w-[340px] overflow-hidden rounded-[40px] border-[8px] border-background bg-background shadow-2xl">
-                <div className="bg-surface-muted px-5 py-4">
+        <div className="flex min-h-[600px] items-center justify-center rounded-2xl border border-border bg-surface p-4 shadow-sm sm:min-h-[680px] sm:p-8">
+            <div className="w-full max-w-[340px] overflow-hidden rounded-[32px] border-[6px] border-background bg-background shadow-2xl sm:rounded-[40px] sm:border-[8px]">
+                <div className="border-b border-border bg-surface-muted px-4 py-4 sm:px-5">
                     <div className="mx-auto mb-4 h-1.5 w-16 rounded-full bg-border" />
 
                     <p className="text-sm font-semibold text-text">
@@ -325,9 +325,9 @@ const MobilePreview = ({
                     </p>
                 </div>
 
-                <div className="min-h-[560px] space-y-4 bg-background p-4">
+                <div className="min-h-[520px] space-y-4 bg-background p-3 sm:min-h-[560px] sm:p-4">
                     <div className="flex justify-end">
-                        <div className="max-w-[80%] rounded-2xl rounded-br-md bg-primary px-4 py-3 text-sm text-primary-foreground">
+                        <div className="max-w-[82%] rounded-2xl rounded-br-md bg-primary px-3.5 py-2.5 text-sm text-primary-foreground shadow-sm sm:px-4 sm:py-3">
                             {formatType(
                                 trigger,
                             )}
@@ -366,7 +366,7 @@ const MobilePreview = ({
                                         }
                                         className="flex justify-start"
                                     >
-                                        <div className="max-w-[80%] rounded-2xl rounded-bl-md bg-surface-muted px-4 py-3 text-sm text-text">
+                                        <div className="max-w-[82%] rounded-2xl rounded-bl-md border border-border bg-surface-muted px-3.5 py-2.5 text-sm text-text shadow-sm sm:px-4 sm:py-3">
                                             {String(
                                                 step
                                                     .config
@@ -387,7 +387,7 @@ const MobilePreview = ({
                                         key={
                                             index
                                         }
-                                        className="rounded-xl border border-border bg-surface-muted p-3 text-xs text-text-secondary"
+                                        className="rounded-xl border border-border bg-surface-muted p-3 text-xs leading-5 text-text-secondary"
                                     >
                                         Public reply:{" "}
                                         {String(
@@ -405,7 +405,7 @@ const MobilePreview = ({
                                     key={
                                         index
                                     }
-                                    className="rounded-xl border border-border bg-surface-muted p-3 text-xs text-text-secondary"
+                                    className="rounded-xl border border-border bg-surface-muted p-3 text-xs leading-5 text-text-secondary"
                                 >
                                     {
                                         formatType(

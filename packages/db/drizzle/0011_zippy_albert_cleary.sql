@@ -1,0 +1,3 @@
+ALTER TABLE "platform_accounts" ADD COLUMN "platform_id" uuid;--> statement-breakpoint
+ALTER TABLE "platform_accounts" ADD CONSTRAINT "platform_accounts_platform_id_platforms_id_fk" FOREIGN KEY ("platform_id") REFERENCES "public"."platforms"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "platform_accounts_platform_id_idx" ON "platform_accounts" USING btree ("platform_id");

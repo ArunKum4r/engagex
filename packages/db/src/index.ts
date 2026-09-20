@@ -28,3 +28,8 @@ export * from "./queries/automation-triggers.js";
 export * from "./queries/automation-steps.js";
 export * from "./queries/automation-edges.js";
 export * from "./queries/automation-graphs.js";
+export * from "./queries/instagram.js";
+export * from "./queries/instagram-permissions.js";
+export * from "./queries/automation-capabilities.js";
+export * from "./queries/automation-executions.js";
+export * from "./queries/automation-execution-steps.js";

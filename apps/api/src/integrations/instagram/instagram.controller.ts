@@ -1,7 +1,9 @@
 import {
     Controller,
+    Delete,
     Get,
     Param,
+    Post,
     Query,
     Req,
     Res,
@@ -65,5 +67,57 @@ export class InstagramController {
 
         const frontendUrl = process.env.FRONTEND_URL ?? "http://localhost:5173";
         return response.redirect(`${frontendUrl}/integrations?instagram=connected`);
+    }
+
+    @Get("workspaces/:workspaceId/integrations/instagram/:platformAccountId/test")
+    @UseGuards(AuthGuard, WorkspaceRoleGuard)
+    @RequireWorkspaceRole("OWNER", "ADMIN")
+    async testConnection(
+        @Param("workspaceId") workspaceId: string,
+        @Param("platformAccountId") platformAccountId: string,
+    ) {
+        return this.instagramService.testConnection(
+            workspaceId,
+            platformAccountId,
+        );
+    }
+
+    @Post("workspaces/:workspaceId/integrations/instagram/:platformAccountId/webhook/subscribe")
+    @UseGuards(AuthGuard, WorkspaceRoleGuard)
+    @RequireWorkspaceRole("OWNER", "ADMIN")
+    async subscribeToWebhooks(
+        @Param("workspaceId") workspaceId: string,
+        @Param("platformAccountId") platformAccountId: string,
+    ) {
+        return this.instagramService.subscribeToWebhooks(
+            workspaceId,
+            platformAccountId,
+        );
+    }
+
+    @Get("workspaces/:workspaceId/integrations/instagram/:platformAccountId/webhook/subscriptions")
+    @UseGuards(AuthGuard, WorkspaceRoleGuard)
+    @RequireWorkspaceRole("OWNER", "ADMIN")
+    async getWebhookSubscriptions(
+        @Param("workspaceId") workspaceId: string,
+        @Param("platformAccountId") platformAccountId: string,
+    ) {
+        return this.instagramService.getWebhookSubscriptions(
+            workspaceId,
+            platformAccountId,
+        );
+    }
+
+    @Delete(":platformAccountId")
+    @UseGuards(AuthGuard, WorkspaceRoleGuard)
+    @RequireWorkspaceRole("OWNER", "ADMIN")
+    async disconnectInstagram(
+        @Param("workspaceId") workspaceId: string,
+        @Param("platformAccountId") platformAccountId: string,
+    ) {
+        return this.instagramService.disconnectInstagramAccount(
+            workspaceId,
+            platformAccountId,
+        );
     }
 }

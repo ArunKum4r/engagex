@@ -20,6 +20,9 @@ import IntegrationDetailsPage from "./pages/integrations/IntegrationDetailsPage.
 import IntegrationAccountPage from "./pages/integrations/IntegrationAccountPage.js";
 import AutomationEditPage from "./pages/automations/AutomationEditPage.js";
 import AutomationPreviewPage from "./pages/automations/AutomationPreviewPage.js";
+import PrivacyPolicy from "./pages/PrivacyPolicy.js";
+import TermsOfService from "./pages/TermsOfService.js";
+import DataDeletion from "./pages/DataDeletion.js";
 
 const App = () => {
     useTheme();
@@ -35,6 +38,9 @@ const App = () => {
                 <Route path="/forgot-password" element={<ForgotPasswordPage />} />
                 <Route path="/reset-password" element={<ResetPasswordPage />} />
                 <Route path="/invitations/accept" element={<AcceptInvitationPage />} />
+                <Route path="/privacy" element={<PrivacyPolicy />} />
+                <Route path="/terms" element={<TermsOfService />} />
+                <Route path="/data-deletion" element={<DataDeletion />} />
 
                 <Route element={<ProtectedRoute /> }>
                     <Route element={<AppShell />}>

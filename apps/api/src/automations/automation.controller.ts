@@ -7,6 +7,7 @@ import { AutomationGraphResponseDto, AutomationResponseDto, CreateAutomationDto,
 import { AutomationService } from "./automation.service.js";
 import { RequireWorkspaceRole } from "../workspaces/workspace-role.decorator.js";
 import { WorkspaceRoleGuard } from "../workspaces/workspace-role.guard.js";
+import { AutomationExecutionService } from "./execution/automation-execution.service.js";
 
 @ApiTags("Automations")
 @UseGuards(AuthGuard)
@@ -15,6 +16,7 @@ export class AutomationController {
 
     constructor(
         private readonly automationService: AutomationService,
+        private readonly automationExecutionService: AutomationExecutionService,
     ) {}
 
     // ============================
@@ -255,6 +257,55 @@ export class AutomationController {
             workspaceId,
             automationId,
             dto,
+        );
+    }
+
+    // ============================
+    // Test Automation
+    // ============================
+    @Post(":automationId/test")
+    @UseGuards(AuthGuard, WorkspaceRoleGuard)
+    @RequireWorkspaceRole("OWNER", "ADMIN")
+    @ApiOperation({
+        summary: "Test automation",
+    })
+    @ApiBody({
+        schema: {
+            type: "object",
+            properties: {
+                input: {
+                    type: "object",
+                    additionalProperties: true,
+                    example: {},
+                },
+                dryRun: {
+                    type: "boolean",
+                    example: true,
+                },
+            },
+        },
+    })
+    @ApiResponse({
+        status: 200,
+        description: "Automation test execution completed",
+    })
+    async test(
+        @Param("workspaceId") workspaceId: string,
+        @Param("automationId") automationId: string,
+        @Body() body: {
+            input?: Record<string, unknown>;
+            dryRun?: boolean;
+        },
+    ) {
+        await this.automationService.findOne(
+            workspaceId,
+            automationId,
+        );
+
+        return this.automationExecutionService.execute(
+            automationId,
+            body.input ?? {},
+            body.dryRun ?? true,
         );
     }
 }

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
     ArrowLeft,
     Eye,
@@ -45,6 +46,9 @@ const AutomationDetailsPage = () => {
     const workspaceId =
         currentWorkspace?.workspace.id;
 
+    const [actionError, setActionError] =
+        useState<string | null>(null);
+
     const {
         data: automation,
         isLoading,
@@ -76,6 +80,9 @@ const AutomationDetailsPage = () => {
         useMutation({
             mutationFn:
                 activateAutomation,
+            onMutate: () => {
+                setActionError(null);
+            },
             onSuccess: () => {
                 if (
                     workspaceId &&
@@ -101,12 +108,22 @@ const AutomationDetailsPage = () => {
                     );
                 }
             },
+            onError: (error) => {
+                setActionError(
+                    error instanceof Error
+                        ? error.message
+                        : "Unable to activate automation.",
+                );
+            },
         });
 
     const pauseMutation =
         useMutation({
             mutationFn:
                 pauseAutomation,
+            onMutate: () => {
+                setActionError(null);
+            },
             onSuccess: () => {
                 if (
                     workspaceId &&
@@ -121,7 +138,23 @@ const AutomationDetailsPage = () => {
                                 ),
                         },
                     );
+
+                    void queryClient.invalidateQueries(
+                        {
+                            queryKey:
+                                queryKeys.automations.all(
+                                    workspaceId,
+                                ),
+                        },
+                    );
                 }
+            },
+            onError: (error) => {
+                setActionError(
+                    error instanceof Error
+                        ? error.message
+                        : "Unable to pause automation.",
+                );
             },
         });
 
@@ -143,6 +176,13 @@ const AutomationDetailsPage = () => {
 
                 navigate(
                     "/automations",
+                );
+            },
+            onError: (error) => {
+                setActionError(
+                    error instanceof Error
+                        ? error.message
+                        : "Unable to delete automation.",
                 );
             },
         });
@@ -178,6 +218,8 @@ const AutomationDetailsPage = () => {
 
     const handleDelete =
         () => {
+            setActionError(null);
+
             if (
                 !workspaceId ||
                 !automationId
@@ -246,7 +288,7 @@ const AutomationDetailsPage = () => {
         "PAUSED";
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-5 sm:space-y-6">
             <Link
                 to="/automations"
                 className="inline-flex items-center gap-2 text-sm text-text-secondary transition-colors hover:text-text"
@@ -293,7 +335,7 @@ const AutomationDetailsPage = () => {
                     )}
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
                     {isActive ? (
                         <Button
                             variant="secondary"
@@ -339,19 +381,21 @@ const AutomationDetailsPage = () => {
                         Preview
                     </Button>
 
-                    <Button
-                        variant="secondary"
-                        onClick={() =>
-                            navigate(
-                                `/automations/${automationId}/edit`,
-                            )
-                        }
-                    >
-                        <Pencil
-                            size={16}
-                        />
-                        Edit
-                    </Button>
+                    {!isActive && (
+                        <Button
+                            variant="secondary"
+                            onClick={() =>
+                                navigate(
+                                    `/automations/${automationId}/edit`,
+                                )
+                            }
+                        >
+                            <Pencil
+                                size={16}
+                            />
+                            Edit
+                        </Button>
+                    )}
 
                     <Button
                         variant="danger"
@@ -370,9 +414,15 @@ const AutomationDetailsPage = () => {
                 </div>
             </div>
 
+            {actionError && (
+                <div className="rounded-xl border border-danger/20 bg-danger/5 px-4 py-3 text-sm text-danger">
+                    {actionError}
+                </div>
+            )}
+
             <div className="grid min-w-0 gap-6 lg:grid-cols-3">
-                <section className="min-w-0 overflow-hidden rounded-2xl border border-border bg-surface lg:col-span-2">
-                    <div className="border-b border-border px-5 py-4">
+                <section className="min-w-0 overflow-hidden rounded-2xl border border-border bg-surface shadow-sm lg:col-span-2">
+                    <div className="border-b border-border bg-surface/80 px-4 py-4 sm:px-5">
                         <h2 className="text-sm font-semibold text-text">
                             Workflow
                         </h2>
@@ -393,14 +443,14 @@ const AutomationDetailsPage = () => {
                     />
                 </section>
 
-                <aside className="min-w-0 self-start overflow-hidden rounded-2xl border border-border bg-surface">
-                    <div className="border-b border-border px-5 py-4">
+                <aside className="min-w-0 self-start overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
+                    <div className="border-b border-border bg-surface/80 px-4 py-4 sm:px-5">
                         <h2 className="text-sm font-semibold text-text">
                             Details
                         </h2>
                     </div>
 
-                    <div className="space-y-5 p-5">
+                    <div className="grid gap-5 p-4 sm:p-5">
                         <DetailItem
                             label="Status"
                             value={

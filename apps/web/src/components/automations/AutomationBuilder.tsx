@@ -1,4 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+    useCallback,
+    useEffect,
+    useRef,
+    useState,
+} from "react";
 import {
     Background,
     Controls,
@@ -11,6 +16,7 @@ import {
     type Edge,
     type Node,
     type NodeMouseHandler,
+    type NodeChange,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
@@ -25,6 +31,8 @@ import {
     saveAutomationGraph,
     type AutomationGraphTrigger,
 } from "../../api/automation";
+import { getPlatformAccount } from "../../api/integrations";
+import { getStepCapability } from "./capabilities";
 
 interface AutomationBuilderProps {
     workspaceId: string;
@@ -37,46 +45,34 @@ const nodeTypes = {
     step: StepNode,
 };
 
-const conditionTypes = new Set([
-    "KEYWORD_MATCH",
-    "FOLLOWER_STATUS",
-]);
+const createNodeId = () => `new-step-${crypto.randomUUID()}`;
 
-const createNodeId = () =>
-    `new-step-${crypto.randomUUID()}`;
+const createEdgeId = () => `edge-${crypto.randomUUID()}`;
 
-const createEdgeId = () =>
-    `edge-${crypto.randomUUID()}`;
-
-const AutomationBuilder = ({
-    workspaceId,
-    automationId,
-    editable = false,
-}: AutomationBuilderProps) => {
+const AutomationBuilder = ({ workspaceId, automationId, editable = false }: AutomationBuilderProps) => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-
+    const [validationError, setValidationError] = useState<string | null>(null);
     const [showAddStep, setShowAddStep] = useState(false);
-    const [showTriggerSelector, setShowTriggerSelector] =
-        useState(false);
+    const [showTriggerSelector, setShowTriggerSelector] = useState(false);
+    const [selectedNode, setSelectedNode] = useState<Node | null>(null);
+    const [trigger, setTrigger] = useState<AutomationGraphTrigger | null>(null);
+    const [platform, setPlatform] = useState<string | null>(null);
 
-    const [selectedNode, setSelectedNode] =
-        useState<Node | null>(null);
-
-    const [trigger, setTrigger] =
-        useState<AutomationGraphTrigger | null>(null);
-
-    const [nodes, setNodes, onNodesChange] =
-        useNodesState<Node>([]);
-
-    const [edges, setEdges, onEdgesChange] =
-        useEdgesState<Edge>([]);
+    const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
+    const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
     /*
      * initializedRef prevents the initial graph load from
      * immediately triggering an autosave.
      */
     const initializedRef = useRef(false);
+
+    /*
+     * Prevents autosave immediately after loading an existing workflow.
+     * Autosave starts only after the user actually changes something.
+     */
+    const hasUserChangesRef = useRef(false);
 
     /*
      * savingRef prevents multiple requests from running at
@@ -124,12 +120,32 @@ const AutomationBuilder = ({
             setError(null);
 
             initializedRef.current = false;
+            hasUserChangesRef.current = false;
             dirtyRef.current = false;
+            setValidationError(null);
 
             const data = await getAutomationGraph(
                 workspaceId,
                 automationId,
             );
+
+            const platformAccountId =
+                data.automation.platformAccountId;
+
+            let loadedPlatform: string | null = null;
+
+            if (platformAccountId) {
+                const account =
+                    await getPlatformAccount(
+                        workspaceId,
+                        platformAccountId,
+                    );
+
+                loadedPlatform = account.platform;
+                setPlatform(account.platform);
+            } else {
+                setPlatform(null);
+            }
 
             const loadedTrigger =
                 data.triggers[0] ?? null;
@@ -159,6 +175,7 @@ const AutomationBuilder = ({
                         : "Choose a trigger",
                     triggerType:
                         loadedTrigger?.type ?? null,
+                    platform: loadedPlatform,
                     config:
                         loadedTrigger?.config ?? {},
                     isPlaceholder:
@@ -166,40 +183,46 @@ const AutomationBuilder = ({
                 },
             };
 
-            const stepNodes: Node[] = data.steps.map((step) => ({
-                id: step.id,
-                type: "step",
-                position:
-                    step.canvasPosition ?? {
-                        x: 420,
-                        y:
-                            250 +
-                            step.position * 170,
+            const stepNodes: Node[] =
+                data.steps.map((step) => ({
+                    id: step.id,
+                    type: "step",
+                    position:
+                        step.canvasPosition ?? {
+                            x: 420,
+                            y:
+                                250 +
+                                step.position * 170,
+                        },
+                    data: {
+                        label: step.type.replaceAll(
+                            "_",
+                            " ",
+                        ),
+                        stepType: step.type,
+                        config: step.config,
+                        platform: loadedPlatform,
                     },
-                data: {
-                    label: step.type.replaceAll(
-                        "_",
-                        " ",
-                    ),
-                    stepType: step.type,
-                    config: step.config,
-                },
-            }));
+                }));
 
-            const flowEdges: Edge[] = data.edges.map((edge) => ({
-                id: edge.id,
-                source: edge.fromStepId,
-                target: edge.toStepId,
-                sourceHandle:
-                    edge.branch === "YES"
-                        ? "yes"
-                        : edge.branch === "NO"
-                            ? "no"
-                            : "default",
-                label:
-                    edge.branch ?? undefined,
-                type: "smoothstep",
-            }));
+            const flowEdges: Edge[] =
+                data.edges.map((edge) => ({
+                    id: edge.id,
+                    source: edge.fromStepId,
+                    target: edge.toStepId,
+                    sourceHandle:
+                        edge.branch === "YES"
+                            ? "yes"
+                            : edge.branch === "NO"
+                                ? "no"
+                                : edge.branch?.startsWith("PATH_")
+                                    ? `path-${edge.branch.slice(5)}`
+                                    : "default",
+                    targetHandle: "target",
+                    label:
+                        edge.branch ?? undefined,
+                    type: "smoothstep",
+                }));
 
             /*
              * Trigger -> entry step is represented only in
@@ -211,6 +234,7 @@ const AutomationBuilder = ({
                     source: triggerNodeId,
                     target: loadedTrigger.entryStepId,
                     sourceHandle: "default",
+                    targetHandle: "target",
                     type: "smoothstep",
                 });
             }
@@ -259,6 +283,151 @@ const AutomationBuilder = ({
         };
     }, [loadGraph]);
 
+    const validateGraph = useCallback(() => {
+        const stepNodes = nodes.filter(
+            (node) => node.type === "step",
+        );
+
+        const stepNodeIds = new Set(
+            stepNodes.map((node) => node.id),
+        );
+
+        const errors: string[] = [];
+
+        if (!trigger) {
+            errors.push("Select a trigger before saving.");
+        }
+
+        const triggerEntryEdge = edges.find(
+            (edge) =>
+                edge.source === triggerNodeIdRef.current &&
+                Boolean(edge.target),
+        );
+
+        if (trigger && !triggerEntryEdge) {
+            errors.push(
+                "Connect the trigger to the first step.",
+            );
+        }
+
+        if (stepNodes.length === 0) {
+            errors.push(
+                "Add at least one step to the automation.",
+            );
+        }
+
+        for (const node of stepNodes) {
+            const outgoingEdges = edges.filter(
+                (edge) => edge.source === node.id,
+            );
+
+            const incomingEdges = edges.filter(
+                (edge) => edge.target === node.id,
+            );
+
+            if (
+                triggerEntryEdge?.target !== node.id &&
+                incomingEdges.length === 0
+            ) {
+                errors.push(
+                    `"${String(node.data?.label ?? node.data?.stepType ?? "Step")}" is not connected to the workflow.`,
+                );
+            }
+
+            const stepType =
+                typeof node.data?.stepType === "string"
+                    ? node.data.stepType
+                    : "";
+
+            const capability = getStepCapability(
+                platform,
+                stepType,
+            );
+
+            if (capability?.category === "CONDITION") {
+                const hasYes = outgoingEdges.some(
+                    (edge) =>
+                        edge.sourceHandle === "yes",
+                );
+
+                const hasNo = outgoingEdges.some(
+                    (edge) =>
+                        edge.sourceHandle === "no",
+                );
+
+                if (!hasYes || !hasNo) {
+                    errors.push(
+                        `"${String(node.data?.label ?? stepType)}" must have both YES and NO branches connected.`,
+                    );
+                }
+            }
+
+            if (stepType === "RANDOMIZER") {
+                const config =
+                    typeof node.data?.config === "object" &&
+                        node.data.config !== null
+                        ? (node.data.config as Record<
+                            string,
+                            unknown
+                        >)
+                        : {};
+
+                const pathCount =
+                    typeof config.paths === "number"
+                        ? Math.min(
+                            5,
+                            Math.max(2, config.paths),
+                        )
+                        : 2;
+
+                for (
+                    let path = 1;
+                    path <= pathCount;
+                    path += 1
+                ) {
+                    const hasPath = outgoingEdges.some(
+                        (edge) =>
+                            edge.sourceHandle ===
+                            `path-${path}`,
+                    );
+
+                    if (!hasPath) {
+                        errors.push(
+                            `"${String(node.data?.label ?? "Randomizer")}" is missing Path ${path}.`,
+                        );
+                    }
+                }
+            }
+        }
+
+        for (const edge of edges) {
+            if (
+                edge.id.startsWith("trigger-entry-") ||
+                edge.source === triggerNodeIdRef.current
+            ) {
+                continue;
+            }
+
+            if (
+                !stepNodeIds.has(edge.source) ||
+                !stepNodeIds.has(edge.target)
+            ) {
+                errors.push(
+                    "The workflow contains a connection to a missing step.",
+                );
+
+                break;
+            }
+        }
+
+        return errors;
+    }, [
+        nodes,
+        edges,
+        trigger,
+        platform,
+    ]);
+
     /*
      * Save the current graph.
      *
@@ -287,41 +456,38 @@ const AutomationBuilder = ({
         dirtyRef.current = false;
 
         try {
-            // const triggerNode =
-            //     nodes.find(
-            //         (node) =>
-            //             node.type === "trigger",
-            //     );
-
-            // const stepNodes =
-            //     getStepNodes();
-
-            // /*
-            //  * Find the step connected directly from the trigger.
-            //  *
-            //  * This ID is a frontend ID. The backend maps it to
-            //  * the generated database ID.
-            //  */
-            // const firstStep =
-            //     triggerNode
-            //         ? edges.find(
-            //             (edge) =>
-            //                 edge.source ===
-            //                 triggerNode.id &&
-            //                 !edge.id.startsWith(
-            //                     "trigger-entry-",
-            //                 ),
-            //         )?.target ?? null
-            //         : null;
             const stepNodes = getStepNodes();
-            const firstStep = trigger?.entryStepId ?? null;
+
+            const validationErrors = validateGraph();
+
+            if (validationErrors.length > 0) {
+                setValidationError(validationErrors.join(" "));
+                return;
+            }
+
+            setError(null);
+
+            /*
+             * The trigger -> step relationship is represented by a
+             * synthetic React Flow edge. Use that edge as the source
+             * of truth instead of relying on trigger.entryStepId,
+             * because new steps can have temporary client IDs.
+             */
+            const triggerEntryEdge = edges.find(
+                (edge) =>
+                    edge.source ===
+                        triggerNodeIdRef.current &&
+                    Boolean(edge.target),
+            );
+
+            const entryStepId =
+                triggerEntryEdge?.target ?? null;
 
             const payload = {
                 trigger: trigger
                     ? {
                         type: trigger.type,
-                        entryStepId:
-                            firstStep ?? null,
+                        entryStepId,
                         config:
                             trigger.config ?? {},
                     }
@@ -394,14 +560,18 @@ const AutomationBuilder = ({
                                     edge.sourceHandle === "yes"
                                         ? "YES"
                                         : edge.sourceHandle === "no"
-                                        ? "NO"
-                                        : null;
+                                            ? "NO"
+                                            : edge.sourceHandle?.startsWith("path-")
+                                                ? `PATH_${edge.sourceHandle.slice(5)}`
+                                                : null;
 
                                 return [
                                     `${edge.source}:${edge.target}`,
                                     {
-                                        fromStepId: edge.source,
-                                        toStepId: edge.target,
+                                        fromStepId:
+                                            edge.source,
+                                        toStepId:
+                                            edge.target,
                                         branch,
                                     },
                                 ];
@@ -410,11 +580,37 @@ const AutomationBuilder = ({
                 ),
             };
 
-            await saveAutomationGraph(
-                workspaceId,
-                automationId,
-                payload,
-            );
+            const savedGraph =
+                await saveAutomationGraph(
+                    workspaceId,
+                    automationId,
+                    payload,
+                );
+
+            /*
+             * The backend creates fresh database step IDs on save.
+             * Do not replace the React Flow nodes with those IDs.
+             *
+             * Only synchronize the local trigger state with the
+             * persisted trigger returned by the backend.
+             */
+            const savedTrigger =
+                savedGraph.triggers[0] ?? null;
+
+            if (savedTrigger) {
+                setTrigger((current) =>
+                    current
+                        ? {
+                            ...current,
+                            id: savedTrigger.id,
+                            entryStepId:
+                                savedTrigger.entryStepId,
+                            updatedAt:
+                                savedTrigger.updatedAt,
+                        }
+                        : current,
+                );
+            }
         } catch (err) {
             console.error(
                 "Failed to save automation graph",
@@ -450,6 +646,8 @@ const AutomationBuilder = ({
         edges,
         trigger,
         getStepNodes,
+        setTrigger,
+        validateGraph
     ]);
 
     /*
@@ -467,7 +665,8 @@ const AutomationBuilder = ({
     useEffect(() => {
         if (
             !editable ||
-            !initializedRef.current
+            !initializedRef.current ||
+            !hasUserChangesRef.current
         ) {
             return;
         }
@@ -499,175 +698,235 @@ const AutomationBuilder = ({
     ]);
 
     /*
-    * Add a new automation step.
-    */
-    const handleAddStep = useCallback((type: string) => {
-        const stepNodes = getStepNodes();
+     * Add a new automation step.
+     */
+    const handleAddStep = useCallback(
+        (type: string) => {
+            hasUserChangesRef.current = true;
+            setValidationError(null);
+            const stepNodes = getStepNodes();
 
-        /*
-            * Resolve the selected step from the latest React Flow state.
-            * The ref is more reliable than selectedNode because the
-            * Add Step menu can be opened/interacted with between renders.
-            */
-        const selectedStep = selectedNodeIdRef.current
-            ? nodes.find(
-                    (node) =>
-                        node.id ===
-                        selectedNodeIdRef.current,
-                ) ?? null
-            : null;
+            /*
+             * Resolve the selected step from the latest React Flow state.
+             * The ref is more reliable than selectedNode because the
+             * Add Step menu can be opened/interacted with between renders.
+             */
+            const selectedStep =
+                selectedNodeIdRef.current
+                    ? nodes.find(
+                        (node) =>
+                            node.id ===
+                            selectedNodeIdRef.current,
+                    ) ?? null
+                    : null;
 
-        /*
-            * If a step is selected, connect from that step.
-            * Otherwise continue from the last step.
-            */
-        const previousStep =
-            selectedStep ??
-            stepNodes
-                .slice()
-                .sort(
-                    (a, b) =>
-                        a.position.y -
-                        b.position.y,
-                )
-                .at(-1) ??
-            null;
+            /*
+             * If a step is selected, connect from that step.
+             * Otherwise continue from the last step.
+             */
+            const previousStep =
+                selectedStep ??
+                stepNodes
+                    .slice()
+                    .sort(
+                        (a, b) =>
+                            a.position.y -
+                            b.position.y,
+                    )
+                    .at(-1) ??
+                null;
 
-        const newNodeId = createNodeId();
+            const newNodeId = createNodeId();
 
-        const newNode: Node = {
-            id: newNodeId,
-            type: "step",
-            position: previousStep
-                ? {
+            const newNode: Node = {
+                id: newNodeId,
+                type: "step",
+                position: previousStep
+                    ? {
                         x: previousStep.position.x,
-                        y: previousStep.position.y + 220,
+                        y:
+                            previousStep.position.y +
+                            220,
                     }
-                : {
+                    : {
                         x: 420,
                         y: 250,
                     },
-            data: {
-                label: type.replaceAll("_", " "),
-                stepType: type,
-                config: {},
-            },
-        };
-
-        /*
-            * Add the new node.
-            */
-        setNodes((currentNodes) => [
-            ...currentNodes,
-            newNode,
-        ]);
-
-        /*
-            * Automatically connect the new node.
-            */
-        if (previousStep) {
-            const isCondition = conditionTypes.has(
-                String(previousStep.data?.stepType),
-            );
-
-            setEdges((currentEdges) => {
-                const alreadyExists =
-                    currentEdges.some(
-                        (edge) =>
-                            edge.source ===
-                                previousStep.id &&
-                            edge.target ===
-                                newNodeId,
-                    );
-
-                if (alreadyExists) {
-                    return currentEdges;
-                }
-
-                return [
-                    ...currentEdges,
-                    {
-                        id: createEdgeId(),
-                        source: previousStep.id,
-                        target: newNodeId,
-                        sourceHandle:
-                            isCondition
-                                ? "yes"
-                                : "default",
-                        targetHandle: "default",
-                        label: isCondition
-                            ? "YES"
-                            : undefined,
-                        type: "smoothstep",
-                    },
-                ];
-            });
-        } else if (trigger) {
-            /*
-                * This is the first step.
-                * Connect it to the trigger visually and persist
-                * the entry step through trigger.entryStepId.
-                */
-            const triggerNodeId =
-                triggerNodeIdRef.current;
-
-            setEdges((currentEdges) => [
-                ...currentEdges.filter(
-                    (edge) =>
-                        !edge.id.startsWith(
-                            "trigger-entry-",
-                        ),
-                ),
-                {
-                    id: `trigger-entry-${triggerNodeId}`,
-                    source: triggerNodeId,
-                    target: newNodeId,
-                    sourceHandle: "default",
-                    targetHandle: "default",
-                    type: "smoothstep",
+                data: {
+                    label: type.replaceAll("_", " "),
+                    stepType: type,
+                    config: {},
+                    platform,
                 },
+            };
+
+            /*
+             * Add the new node.
+             */
+            setNodes((currentNodes) => [
+                ...currentNodes,
+                newNode,
             ]);
 
-            setTrigger((current) =>
-                current
-                    ? {
-                            ...current,
-                            entryStepId: newNodeId,
+            /*
+             * Automatically connect the new node.
+             */
+            if (previousStep) {
+                const previousStepType =
+                    String(
+                        previousStep.data?.stepType,
+                    );
+
+                const previousStepCapability =
+                    getStepCapability(
+                        platform,
+                        previousStepType,
+                    );
+
+                const isCondition =
+                    previousStepCapability?.category ===
+                    "CONDITION";
+
+                const isRandomizer =
+                    previousStepType === "RANDOMIZER";
+
+                const previousStepConfig =
+                    typeof previousStep.data?.config === "object" &&
+                        previousStep.data.config !== null
+                        ? (previousStep.data.config as Record<string, unknown>)
+                        : {};
+
+                setEdges((currentEdges) => {
+                    const alreadyExists =
+                        currentEdges.some(
+                            (edge) =>
+                                edge.source ===
+                                previousStep.id &&
+                                edge.target === newNodeId,
+                        );
+
+                    if (alreadyExists) {
+                        return currentEdges;
+                    }
+
+                    let sourceHandle = "default";
+                    let label: string | undefined;
+
+                    if (isCondition) {
+                        sourceHandle = "yes";
+                        label = "YES";
+                    } else if (isRandomizer) {
+                        const pathCount =
+                            typeof previousStepConfig
+                                ?.paths === "number"
+                                ? Math.min(
+                                    5,
+                                    Math.max(
+                                        2,
+                                        previousStepConfig.paths,
+                                    ),
+                                )
+                                : 2;
+
+                        const usedPaths = new Set(
+                            currentEdges
+                                .filter(
+                                    (edge) =>
+                                        edge.source ===
+                                        previousStep.id &&
+                                        edge.sourceHandle?.startsWith(
+                                            "path-",
+                                        ),
+                                )
+                                .map((edge) =>
+                                    Number(
+                                        edge.sourceHandle?.slice(5),
+                                    ),
+                                ),
+                        );
+
+                        const availablePath = Array.from(
+                            { length: pathCount },
+                            (_, index) => index + 1,
+                        ).find(
+                            (path) => !usedPaths.has(path),
+                        );
+
+                        if (availablePath) {
+                            sourceHandle = `path-${availablePath}`;
+                            label = `PATH ${availablePath}`;
                         }
-                    : current,
-            );
-        }
+                    }
 
-        /*
-            * The newly created node becomes the selected node.
-            * Therefore:
-            *
-            * Add Step
-            *      ↓
-            * Step A
-            *      ↓
-            * Add Step
-            *      ↓
-            * Step B
-            *      ↓
-            * Add Step
-            *      ↓
-            * Step C
-            */
-        selectedNodeIdRef.current = newNodeId;
-        setSelectedNode(newNode);
+                    return [
+                        ...currentEdges,
+                        {
+                            id: createEdgeId(),
+                            source: previousStep.id,
+                            target: newNodeId,
+                            sourceHandle,
+                            targetHandle: "target",
+                            label,
+                            type: "smoothstep",
+                        },
+                    ];
+                });
+            } else if (trigger) {
+                /*
+                 * This is the first step.
+                 * Connect it to the trigger visually and persist
+                 * the entry step through trigger.entryStepId.
+                 */
+                const triggerNodeId =
+                    triggerNodeIdRef.current;
 
-        setShowAddStep(false);
-    },
-    [
-        getStepNodes,
-        nodes,
-        trigger,
-        setNodes,
-        setEdges,
-        setTrigger,
-    ],
+                setEdges((currentEdges) => [
+                    ...currentEdges.filter(
+                        (edge) =>
+                            !edge.id.startsWith(
+                                "trigger-entry-",
+                            ),
+                    ),
+                    {
+                        id: `trigger-entry-${triggerNodeId}`,
+                        source: triggerNodeId,
+                        target: newNodeId,
+                        sourceHandle: "default",
+                        targetHandle: "target",
+                        type: "smoothstep",
+                    },
+                ]);
+
+                setTrigger((current) =>
+                    current
+                        ? {
+                            ...current,
+                            entryStepId:
+                                newNodeId,
+                        }
+                        : current,
+                );
+            }
+
+            /*
+             * The newly created node becomes the selected node.
+             */
+            selectedNodeIdRef.current = newNodeId;
+            setSelectedNode(newNode);
+
+            setShowAddStep(false);
+        },
+        [
+            getStepNodes,
+            nodes,
+            trigger,
+            setNodes,
+            setEdges,
+            setTrigger,
+            platform,
+        ],
     );
+
     /*
      * Manual connection handling.
      */
@@ -702,18 +961,22 @@ const AutomationBuilder = ({
                     : connection.sourceHandle ===
                         "no"
                         ? "NO"
-                        : null;
+                        : connection.sourceHandle?.startsWith("path-")
+                            ? `PATH_${connection.sourceHandle.slice(5)}`
+                            : null;
 
             const newEdge: Edge = {
                 ...connection,
-                id: createEdgeId(),
+                id: sourceIsTrigger
+                    ? `trigger-entry-${triggerNodeIdRef.current}`
+                    : createEdgeId(),
                 type: "smoothstep",
                 sourceHandle:
                     connection.sourceHandle ??
                     "default",
                 targetHandle:
                     connection.targetHandle ??
-                    "default",
+                    "target",
                 label:
                     branch ??
                     undefined,
@@ -763,104 +1026,68 @@ const AutomationBuilder = ({
      *
      * The trigger cannot be deleted.
      */
-    const handleNodesChange = useCallback(
-        (
-            changes: Parameters<
-                typeof onNodesChange
-            >[0],
-        ) => {
-            const filteredChanges =
-                changes.filter(
-                    (change) => {
-                        if (
-                            change.type ===
-                            "remove" &&
-                            "id" in change
-                        ) {
-                            return !change.id.startsWith(
-                                "trigger-",
-                            );
-                        }
+    const handleNodesChange = useCallback((changes: NodeChange[]) => {
+        const deletedNodeIds = changes
+            .filter((change): change is Extract<NodeChange, { type: "remove" }> =>
+                change.type === "remove",
+            )
+            .map((change) => change.id);
 
-                        return true;
-                    },
-                );
+        onNodesChange(changes);
 
-            onNodesChange(
-                filteredChanges,
+        if (deletedNodeIds.length === 0) {
+            return;
+        }
+
+        setEdges((currentEdges) =>
+            currentEdges.filter(
+                (edge) =>
+                    !deletedNodeIds.includes(edge.source) &&
+                    !deletedNodeIds.includes(edge.target),
+            ),
+        );
+
+        setSelectedNode((currentSelectedNode) =>
+            currentSelectedNode &&
+            deletedNodeIds.includes(currentSelectedNode.id)
+                ? null
+                : currentSelectedNode,
+        );
+
+        const triggerEntryStepId = trigger?.entryStepId ?? null;
+
+        if (
+            triggerEntryStepId &&
+            deletedNodeIds.includes(triggerEntryStepId)
+        ) {
+            setTrigger((currentTrigger) =>
+                currentTrigger
+                    ? {
+                        ...currentTrigger,
+                        entryStepId: null,
+                    }
+                    : currentTrigger,
             );
+        }
+    }, [
+        onNodesChange,
+        setEdges,
+        setSelectedNode,
+        setTrigger,
+        trigger?.entryStepId,
+    ]);
 
-            /*
-             * Remove edges belonging to deleted nodes.
-             */
-            const deletedNodeIds =
-                new Set(
-                    changes
-                        .filter(
-                            (change) =>
-                                change.type ===
-                                "remove" &&
-                                "id" in
-                                change,
-                        )
-                        .map(
-                            (change) =>
-                                change.id,
-                        ),
-                );
 
-            if (
-                deletedNodeIds.size === 0
-            ) {
-                return;
+    const handleEdgesChange = useCallback(
+        (changes: Parameters<typeof onEdgesChange>[0]) => {
+            if (changes.length > 0) {
+                hasUserChangesRef.current = true;
+                setValidationError(null);
             }
 
-            setEdges(
-                (currentEdges) =>
-                    currentEdges.filter(
-                        (edge) =>
-                            !deletedNodeIds.has(
-                                edge.source,
-                            ) &&
-                            !deletedNodeIds.has(
-                                edge.target,
-                            ),
-                    ),
-            );
-
-            setSelectedNode(
-                (currentNode) =>
-                    currentNode &&
-                        deletedNodeIds.has(
-                            currentNode.id,
-                        )
-                        ? null
-                        : currentNode,
-            );
-
-            /*
-             * If the entry step was deleted,
-             * clear the trigger's entryStepId.
-             */
-            setTrigger(
-                (current) =>
-                    current &&
-                        current.entryStepId &&
-                        deletedNodeIds.has(
-                            current.entryStepId,
-                        )
-                        ? {
-                            ...current,
-                            entryStepId:
-                                null,
-                        }
-                        : current,
-            );
+            onEdgesChange(changes);
         },
-        [
-            onNodesChange,
-            setEdges,
-        ],
+        [onEdgesChange],
     );
 
     /*
@@ -874,13 +1101,19 @@ const AutomationBuilder = ({
                 }
 
                 if (node.type === "trigger") {
+                    selectedNodeIdRef.current =
+                        node.id;
+
+                    setSelectedNode(node);
                     setShowTriggerSelector(true);
-                    selectedNodeIdRef.current = node.id;
+
                     return;
                 }
 
                 if (node.type === "step") {
-                    selectedNodeIdRef.current = node.id;
+                    selectedNodeIdRef.current =
+                        node.id;
+
                     setSelectedNode(node);
                 }
             },
@@ -888,7 +1121,7 @@ const AutomationBuilder = ({
         );
 
     /*
-     * Update selected step configuration.
+     * Update selected node configuration.
      */
     const handleNodeConfigChange =
         useCallback(
@@ -899,6 +1132,8 @@ const AutomationBuilder = ({
                     unknown
                 >,
             ) => {
+                hasUserChangesRef.current = true;
+                setValidationError(null);
                 setNodes(
                     (currentNodes) =>
                         currentNodes.map(
@@ -923,8 +1158,49 @@ const AutomationBuilder = ({
                             }
                             : currentNode,
                 );
+
+                /*
+                 * Trigger configuration is stored in both:
+                 * - the React Flow node
+                 * - the trigger state used by autosave
+                 *
+                 * Keep them synchronized.
+                 */
+                const updatedNode =
+                    nodes.find(
+                        (node) =>
+                            node.id ===
+                            nodeId,
+                    );
+
+                if (
+                    updatedNode?.type ===
+                    "trigger"
+                ) {
+                    setTrigger(
+                        (currentTrigger) =>
+                            currentTrigger
+                                ? {
+                                    ...currentTrigger,
+                                    config:
+                                        typeof data.config ===
+                                            "object" &&
+                                            data.config !==
+                                            null
+                                            ? (data.config as Record<
+                                                string,
+                                                unknown
+                                            >)
+                                            : {},
+                                }
+                                : currentTrigger,
+                    );
+                }
             },
-            [setNodes],
+            [
+                nodes,
+                setNodes,
+            ],
         );
 
     /*
@@ -939,6 +1215,8 @@ const AutomationBuilder = ({
                     unknown
                 >;
             }) => {
+                hasUserChangesRef.current = true;
+                setValidationError(null);
                 const existingTrigger =
                     trigger;
 
@@ -990,6 +1268,18 @@ const AutomationBuilder = ({
                 const currentTriggerNodeId =
                     triggerNodeIdRef.current;
 
+                const nextTriggerData = {
+                    label:
+                        selectedTrigger.type,
+                    triggerType:
+                        selectedTrigger.type,
+                    platform,
+                    config:
+                        selectedTrigger.config ??
+                        {},
+                    isPlaceholder: false,
+                };
+
                 setNodes(
                     (currentNodes) =>
                         currentNodes.map(
@@ -1000,22 +1290,31 @@ const AutomationBuilder = ({
                                         ...node,
                                         id:
                                             currentTriggerNodeId,
-                                        data: {
-                                            ...node.data,
-                                            label:
-                                                selectedTrigger.type,
-                                            triggerType:
-                                                selectedTrigger.type,
-                                            config:
-                                                selectedTrigger.config ??
-                                                {},
-                                            isPlaceholder:
-                                                false,
-                                        },
+                                        data:
+                                            nextTriggerData,
                                     }
                                     : node,
                         ),
                 );
+
+                /*
+                 * Select the trigger so its configuration
+                 * panel can be opened immediately.
+                 */
+                selectedNodeIdRef.current =
+                    currentTriggerNodeId;
+
+                setSelectedNode({
+                    id: currentTriggerNodeId,
+                    type: "trigger",
+                    position: {
+                        x: 420,
+                        y: 60,
+                    },
+                    draggable: false,
+                    selectable: editable,
+                    data: nextTriggerData,
+                });
 
                 setShowTriggerSelector(
                     false,
@@ -1024,13 +1323,15 @@ const AutomationBuilder = ({
             [
                 trigger,
                 automationId,
+                platform,
+                editable,
                 setNodes,
             ],
         );
 
     if (loading) {
         return (
-            <div className="flex h-[620px] w-full items-center justify-center rounded-2xl border border-border bg-surface">
+            <div className="flex h-[560px] w-full items-center justify-center rounded-2xl border border-border bg-surface sm:h-[640px] lg:h-[740px]">
                 <p className="text-sm text-text-secondary">
                     Loading workflow...
                 </p>
@@ -1040,7 +1341,7 @@ const AutomationBuilder = ({
 
     if (error) {
         return (
-            <div className="flex h-[620px] w-full items-center justify-center rounded-2xl border border-danger/20 bg-danger/5">
+            <div className="flex h-[560px] w-full items-center justify-center rounded-2xl border border-danger/20 bg-danger/5 sm:h-[640px] lg:h-[740px]">
                 <p className="text-sm text-danger">
                     {error}
                 </p>
@@ -1049,9 +1350,14 @@ const AutomationBuilder = ({
     }
 
     return (
-        <div className="relative h-[740px] w-full overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
+        <div className="relative h-[560px] min-w-0 w-full overflow-hidden rounded-2xl border border-border bg-surface shadow-sm sm:h-[640px] lg:h-[740px]">
+            {editable && validationError && (
+                <div className="absolute left-1/2 top-5 z-30 w-[min(720px,calc(100%-32px))] -translate-x-1/2 rounded-xl border border-danger/20 bg-danger/5 px-4 py-3 text-sm text-danger shadow-lg backdrop-blur">
+                    {validationError}
+                </div>
+            )}
             {editable && (
-                <div className="absolute left-5 top-5 z-20 flex items-center gap-2 rounded-xl border border-border bg-card/95 p-1.5 shadow-lg backdrop-blur">
+                <div className="absolute left-2 right-2 top-2 z-20 flex items-center justify-between gap-2 rounded-xl border border-border bg-surface/95 p-1.5 shadow-lg backdrop-blur sm:left-5 sm:right-auto sm:top-5">
                     <button
                         type="button"
                         onClick={() =>
@@ -1059,7 +1365,7 @@ const AutomationBuilder = ({
                                 true,
                             )
                         }
-                        className="rounded-lg px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:bg-surface-muted hover:text-text"
+                        className="rounded-lg px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:bg-surface-muted hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                     >
                         Trigger
                     </button>
@@ -1072,7 +1378,7 @@ const AutomationBuilder = ({
                                     !current,
                             )
                         }
-                        className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+                        className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                     >
                         + Add step
                     </button>
@@ -1094,6 +1400,7 @@ const AutomationBuilder = ({
                                 false,
                             )
                         }
+                    platform={platform}
                     />
                 )}
 
@@ -1103,6 +1410,7 @@ const AutomationBuilder = ({
                         onAddStep={
                             handleAddStep
                         }
+                    platform={platform}
                     />
                 )}
 
@@ -1132,7 +1440,7 @@ const AutomationBuilder = ({
                 }
                 onEdgesChange={
                     editable
-                        ? onEdgesChange
+                        ? handleEdgesChange
                         : undefined
                 }
                 onNodeClick={
@@ -1174,7 +1482,7 @@ const AutomationBuilder = ({
                 defaultEdgeOptions={{
                     type: "smoothstep",
                 }}
-                className="automation-flow"
+                className="automation-flow min-w-0"
             >
                 <Background
                     gap={20}
@@ -1185,13 +1493,13 @@ const AutomationBuilder = ({
                     showInteractive={
                         editable
                     }
-                    style={{ background: "black" }}
+                    className="!border !border-border !bg-surface !shadow-lg [&_button]:!border-border [&_button]:!bg-surface [&_button]:!text-text-secondary [&_button:hover]:!bg-surface-muted [&_button:hover]:!text-text"
                 />
 
                 <MiniMap
                     pannable
                     zoomable
-                    bgColor="black"
+                    className="!border !border-border !bg-surface !shadow-lg"
                 />
             </ReactFlow>
         </div>

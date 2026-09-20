@@ -4,6 +4,10 @@ import { automations } from "../schema/automations.js";
 import { automationTriggers } from "../schema/automation-triggers.js";
 import { automationSteps } from "../schema/automation-steps.js";
 import { automationEdges } from "../schema/automation-edges.js";
+import { validateAutomationGraph } from "./automation-graphs.js";
+import { findPlatformAccountWithPlatform } from "./platform-accounts.js";
+import { validateInstagramPlatformAccount } from "./instagram.js";
+import { validateInstagramAutomationCapabilities } from "./automation-capabilities.js";
 
 export async function createAutomation(data: {
     workspaceId: string;
@@ -134,6 +138,117 @@ export async function deleteAutomation(automationId: string) {
 }
 
 export async function activateAutomation(automationId: string) {
+    const automation = await db
+        .select()
+        .from(automations)
+        .where(
+            eq(
+                automations.id,
+                automationId,
+            ),
+        )
+        .limit(1);
+
+        
+    const currentAutomation = automation[0];
+    if (!currentAutomation) {
+        return {
+            success: false as const,
+            errors: [
+                "Automation not found.",
+            ],
+        };
+    }
+
+    const automationGraph = await findAutomationWithGraph(currentAutomation.id);
+    if (!automationGraph) {
+        return {
+            success: false as const,
+            errors: [
+                "Automation graph could not be loaded.",
+            ],
+        };
+    }
+
+    const validation = await validateAutomationGraph(automationId);
+    if (!validation.valid) {
+        return {
+            success: false as const,
+            errors: validation.errors,
+        };
+    }
+
+    if (!currentAutomation.platformAccountId) {
+        return {
+            success: false as const,
+            errors: [
+                "Automation must have a connected platform account.",
+            ],
+        };
+    }
+
+    const platformAccount =
+        await findPlatformAccountWithPlatform(
+            currentAutomation.workspaceId,
+            currentAutomation.platformAccountId,
+        );
+
+    if (!platformAccount) {
+        return {
+            success: false as const,
+            errors: [
+                "Connected platform account was not found.",
+            ],
+        };
+    }
+
+    if (platformAccount.account.status !== "ACTIVE") {
+        return {
+            success: false as const,
+            errors: [
+                "Connected platform account is not active.",
+            ],
+        };
+    }
+
+    if (platformAccount.account.platform === "INSTAGRAM") {
+        const errors = validateInstagramPlatformAccount(platformAccount.account);
+        if (errors.length > 0) {
+            return {
+                success: false as const,
+                errors,
+            };
+        }
+
+        const trigger = automationGraph.triggers[0] ?? null;
+
+        const capabilityErrors =
+            validateInstagramAutomationCapabilities({
+                trigger:
+                    trigger
+                        ? {
+                            type:
+                                trigger.type,
+                        }
+                        : null,
+                steps:
+                    automationGraph.steps.map(
+                        (step) => ({
+                            type: step.type,
+                        }),
+                    ),
+            });
+
+        if (
+            capabilityErrors.length > 0
+        ) {
+            return {
+                success: false as const,
+                errors: capabilityErrors,
+            };
+        }
+    }
+
     const result = await db
         .update(automations)
         .set({
@@ -148,7 +263,11 @@ export async function activateAutomation(automationId: string) {
         )
         .returning();
 
-    return result[0] ?? null;
+    return {
+        success: true as const,
+        automation:
+            result[0] ?? null,
+    };
 }
 
 export async function pauseAutomation(automationId: string) {
