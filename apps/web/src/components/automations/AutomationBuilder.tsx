@@ -16,6 +16,7 @@ import {
     type Edge,
     type Node,
     type NodeMouseHandler,
+    type NodeChange,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
@@ -44,44 +45,34 @@ const nodeTypes = {
     step: StepNode,
 };
 
-const createNodeId = () =>
-    `new-step-${crypto.randomUUID()}`;
+const createNodeId = () => `new-step-${crypto.randomUUID()}`;
 
-const createEdgeId = () =>
-    `edge-${crypto.randomUUID()}`;
+const createEdgeId = () => `edge-${crypto.randomUUID()}`;
 
-const AutomationBuilder = ({
-    workspaceId,
-    automationId,
-    editable = false,
-}: AutomationBuilderProps) => {
+const AutomationBuilder = ({ workspaceId, automationId, editable = false }: AutomationBuilderProps) => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-
+    const [validationError, setValidationError] = useState<string | null>(null);
     const [showAddStep, setShowAddStep] = useState(false);
-    const [showTriggerSelector, setShowTriggerSelector] =
-        useState(false);
+    const [showTriggerSelector, setShowTriggerSelector] = useState(false);
+    const [selectedNode, setSelectedNode] = useState<Node | null>(null);
+    const [trigger, setTrigger] = useState<AutomationGraphTrigger | null>(null);
+    const [platform, setPlatform] = useState<string | null>(null);
 
-    const [selectedNode, setSelectedNode] =
-        useState<Node | null>(null);
-
-    const [trigger, setTrigger] =
-        useState<AutomationGraphTrigger | null>(null);
-
-    const [platform, setPlatform] =
-        useState<string | null>(null);
-
-    const [nodes, setNodes, onNodesChange] =
-        useNodesState<Node>([]);
-
-    const [edges, setEdges, onEdgesChange] =
-        useEdgesState<Edge>([]);
+    const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
+    const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
     /*
      * initializedRef prevents the initial graph load from
      * immediately triggering an autosave.
      */
     const initializedRef = useRef(false);
+
+    /*
+     * Prevents autosave immediately after loading an existing workflow.
+     * Autosave starts only after the user actually changes something.
+     */
+    const hasUserChangesRef = useRef(false);
 
     /*
      * savingRef prevents multiple requests from running at
@@ -129,7 +120,9 @@ const AutomationBuilder = ({
             setError(null);
 
             initializedRef.current = false;
+            hasUserChangesRef.current = false;
             dirtyRef.current = false;
+            setValidationError(null);
 
             const data = await getAutomationGraph(
                 workspaceId,
@@ -290,6 +283,151 @@ const AutomationBuilder = ({
         };
     }, [loadGraph]);
 
+    const validateGraph = useCallback(() => {
+        const stepNodes = nodes.filter(
+            (node) => node.type === "step",
+        );
+
+        const stepNodeIds = new Set(
+            stepNodes.map((node) => node.id),
+        );
+
+        const errors: string[] = [];
+
+        if (!trigger) {
+            errors.push("Select a trigger before saving.");
+        }
+
+        const triggerEntryEdge = edges.find(
+            (edge) =>
+                edge.source === triggerNodeIdRef.current &&
+                Boolean(edge.target),
+        );
+
+        if (trigger && !triggerEntryEdge) {
+            errors.push(
+                "Connect the trigger to the first step.",
+            );
+        }
+
+        if (stepNodes.length === 0) {
+            errors.push(
+                "Add at least one step to the automation.",
+            );
+        }
+
+        for (const node of stepNodes) {
+            const outgoingEdges = edges.filter(
+                (edge) => edge.source === node.id,
+            );
+
+            const incomingEdges = edges.filter(
+                (edge) => edge.target === node.id,
+            );
+
+            if (
+                triggerEntryEdge?.target !== node.id &&
+                incomingEdges.length === 0
+            ) {
+                errors.push(
+                    `"${String(node.data?.label ?? node.data?.stepType ?? "Step")}" is not connected to the workflow.`,
+                );
+            }
+
+            const stepType =
+                typeof node.data?.stepType === "string"
+                    ? node.data.stepType
+                    : "";
+
+            const capability = getStepCapability(
+                platform,
+                stepType,
+            );
+
+            if (capability?.category === "CONDITION") {
+                const hasYes = outgoingEdges.some(
+                    (edge) =>
+                        edge.sourceHandle === "yes",
+                );
+
+                const hasNo = outgoingEdges.some(
+                    (edge) =>
+                        edge.sourceHandle === "no",
+                );
+
+                if (!hasYes || !hasNo) {
+                    errors.push(
+                        `"${String(node.data?.label ?? stepType)}" must have both YES and NO branches connected.`,
+                    );
+                }
+            }
+
+            if (stepType === "RANDOMIZER") {
+                const config =
+                    typeof node.data?.config === "object" &&
+                        node.data.config !== null
+                        ? (node.data.config as Record<
+                            string,
+                            unknown
+                        >)
+                        : {};
+
+                const pathCount =
+                    typeof config.paths === "number"
+                        ? Math.min(
+                            5,
+                            Math.max(2, config.paths),
+                        )
+                        : 2;
+
+                for (
+                    let path = 1;
+                    path <= pathCount;
+                    path += 1
+                ) {
+                    const hasPath = outgoingEdges.some(
+                        (edge) =>
+                            edge.sourceHandle ===
+                            `path-${path}`,
+                    );
+
+                    if (!hasPath) {
+                        errors.push(
+                            `"${String(node.data?.label ?? "Randomizer")}" is missing Path ${path}.`,
+                        );
+                    }
+                }
+            }
+        }
+
+        for (const edge of edges) {
+            if (
+                edge.id.startsWith("trigger-entry-") ||
+                edge.source === triggerNodeIdRef.current
+            ) {
+                continue;
+            }
+
+            if (
+                !stepNodeIds.has(edge.source) ||
+                !stepNodeIds.has(edge.target)
+            ) {
+                errors.push(
+                    "The workflow contains a connection to a missing step.",
+                );
+
+                break;
+            }
+        }
+
+        return errors;
+    }, [
+        nodes,
+        edges,
+        trigger,
+        platform,
+    ]);
+
     /*
      * Save the current graph.
      *
@@ -319,6 +457,15 @@ const AutomationBuilder = ({
 
         try {
             const stepNodes = getStepNodes();
+
+            const validationErrors = validateGraph();
+
+            if (validationErrors.length > 0) {
+                setValidationError(validationErrors.join(" "));
+                return;
+            }
+
+            setError(null);
 
             /*
              * The trigger -> step relationship is represented by a
@@ -500,6 +647,7 @@ const AutomationBuilder = ({
         trigger,
         getStepNodes,
         setTrigger,
+        validateGraph
     ]);
 
     /*
@@ -517,7 +665,8 @@ const AutomationBuilder = ({
     useEffect(() => {
         if (
             !editable ||
-            !initializedRef.current
+            !initializedRef.current ||
+            !hasUserChangesRef.current
         ) {
             return;
         }
@@ -553,6 +702,8 @@ const AutomationBuilder = ({
      */
     const handleAddStep = useCallback(
         (type: string) => {
+            hasUserChangesRef.current = true;
+            setValidationError(null);
             const stepNodes = getStepNodes();
 
             /*
@@ -639,18 +790,72 @@ const AutomationBuilder = ({
                 const isRandomizer =
                     previousStepType === "RANDOMIZER";
 
+                const previousStepConfig =
+                    typeof previousStep.data?.config === "object" &&
+                        previousStep.data.config !== null
+                        ? (previousStep.data.config as Record<string, unknown>)
+                        : {};
+
                 setEdges((currentEdges) => {
                     const alreadyExists =
                         currentEdges.some(
                             (edge) =>
                                 edge.source ===
                                 previousStep.id &&
-                                edge.target ===
-                                newNodeId,
+                                edge.target === newNodeId,
                         );
 
                     if (alreadyExists) {
                         return currentEdges;
+                    }
+
+                    let sourceHandle = "default";
+                    let label: string | undefined;
+
+                    if (isCondition) {
+                        sourceHandle = "yes";
+                        label = "YES";
+                    } else if (isRandomizer) {
+                        const pathCount =
+                            typeof previousStepConfig
+                                ?.paths === "number"
+                                ? Math.min(
+                                    5,
+                                    Math.max(
+                                        2,
+                                        previousStepConfig.paths,
+                                    ),
+                                )
+                                : 2;
+
+                        const usedPaths = new Set(
+                            currentEdges
+                                .filter(
+                                    (edge) =>
+                                        edge.source ===
+                                        previousStep.id &&
+                                        edge.sourceHandle?.startsWith(
+                                            "path-",
+                                        ),
+                                )
+                                .map((edge) =>
+                                    Number(
+                                        edge.sourceHandle?.slice(5),
+                                    ),
+                                ),
+                        );
+
+                        const availablePath = Array.from(
+                            { length: pathCount },
+                            (_, index) => index + 1,
+                        ).find(
+                            (path) => !usedPaths.has(path),
+                        );
+
+                        if (availablePath) {
+                            sourceHandle = `path-${availablePath}`;
+                            label = `PATH ${availablePath}`;
+                        }
                     }
 
                     return [
@@ -659,18 +864,9 @@ const AutomationBuilder = ({
                             id: createEdgeId(),
                             source: previousStep.id,
                             target: newNodeId,
-                            sourceHandle:
-                                isCondition
-                                    ? "yes"
-                                    : isRandomizer
-                                        ? "path-1"
-                                        : "default",
+                            sourceHandle,
                             targetHandle: "target",
-                            label: isCondition
-                                ? "YES"
-                                : isRandomizer
-                                    ? "PATH 1"
-                                    : undefined,
+                            label,
                             type: "smoothstep",
                         },
                     ];
@@ -771,7 +967,9 @@ const AutomationBuilder = ({
 
             const newEdge: Edge = {
                 ...connection,
-                id: createEdgeId(),
+                id: sourceIsTrigger
+                    ? `trigger-entry-${triggerNodeIdRef.current}`
+                    : createEdgeId(),
                 type: "smoothstep",
                 sourceHandle:
                     connection.sourceHandle ??
@@ -828,118 +1026,68 @@ const AutomationBuilder = ({
      *
      * The trigger cannot be deleted.
      */
-    const handleNodesChange = useCallback(
-        (
-            changes: Parameters<
-                typeof onNodesChange
-            >[0],
-        ) => {
-            const filteredChanges =
-                changes.filter(
-                    (change) => {
-                        if (
-                            change.type ===
-                            "remove" &&
-                            "id" in change
-                        ) {
-                            return !change.id.startsWith(
-                                "trigger-",
-                            );
-                        }
+    const handleNodesChange = useCallback((changes: NodeChange[]) => {
+        const deletedNodeIds = changes
+            .filter((change): change is Extract<NodeChange, { type: "remove" }> =>
+                change.type === "remove",
+            )
+            .map((change) => change.id);
 
-                        return true;
-                    },
-                );
+        onNodesChange(changes);
 
-            onNodesChange(
-                filteredChanges,
+        if (deletedNodeIds.length === 0) {
+            return;
+        }
+
+        setEdges((currentEdges) =>
+            currentEdges.filter(
+                (edge) =>
+                    !deletedNodeIds.includes(edge.source) &&
+                    !deletedNodeIds.includes(edge.target),
+            ),
+        );
+
+        setSelectedNode((currentSelectedNode) =>
+            currentSelectedNode &&
+            deletedNodeIds.includes(currentSelectedNode.id)
+                ? null
+                : currentSelectedNode,
+        );
+
+        const triggerEntryStepId = trigger?.entryStepId ?? null;
+
+        if (
+            triggerEntryStepId &&
+            deletedNodeIds.includes(triggerEntryStepId)
+        ) {
+            setTrigger((currentTrigger) =>
+                currentTrigger
+                    ? {
+                        ...currentTrigger,
+                        entryStepId: null,
+                    }
+                    : currentTrigger,
             );
+        }
+    }, [
+        onNodesChange,
+        setEdges,
+        setSelectedNode,
+        setTrigger,
+        trigger?.entryStepId,
+    ]);
 
-            /*
-             * Remove edges belonging to deleted nodes.
-             */
-            const deletedNodeIds =
-                new Set(
-                    changes
-                        .filter(
-                            (change) =>
-                                change.type ===
-                                "remove" &&
-                                "id" in
-                                change,
-                        )
-                        .map(
-                            (change) =>
-                                change.id,
-                        ),
-                );
 
-            if (
-                deletedNodeIds.size === 0
-            ) {
-                return;
+    const handleEdgesChange = useCallback(
+        (changes: Parameters<typeof onEdgesChange>[0]) => {
+            if (changes.length > 0) {
+                hasUserChangesRef.current = true;
+                setValidationError(null);
             }
 
-            setEdges(
-                (currentEdges) =>
-                    currentEdges.filter(
-                        (edge) =>
-                            !deletedNodeIds.has(
-                                edge.source,
-                            ) &&
-                            !deletedNodeIds.has(
-                                edge.target,
-                            ),
-                    ),
-            );
-
-            setSelectedNode(
-                (currentNode) =>
-                    currentNode &&
-                        deletedNodeIds.has(
-                            currentNode.id,
-                        )
-                        ? null
-                        : currentNode,
-            );
-
-            /*
-             * If the entry step was deleted, clear both the
-             * trigger state and its synthetic React Flow edge.
-             */
-            setEdges((currentEdges) =>
-                currentEdges.filter(
-                    (edge) =>
-                        !(
-                            edge.id.startsWith(
-                                "trigger-entry-",
-                            ) &&
-                            deletedNodeIds.has(
-                                edge.target,
-                            )
-                        ),
-                ),
-            );
-
-            setTrigger(
-                (current) =>
-                    current &&
-                        current.entryStepId &&
-                        deletedNodeIds.has(
-                            current.entryStepId,
-                        )
-                        ? {
-                            ...current,
-                            entryStepId:
-                                null,
-                        }
-                        : current,
-            );
+            onEdgesChange(changes);
         },
-        [
-            onNodesChange,
-            setEdges,
-        ],
+        [onEdgesChange],
     );
 
     /*
@@ -984,6 +1132,8 @@ const AutomationBuilder = ({
                     unknown
                 >,
             ) => {
+                hasUserChangesRef.current = true;
+                setValidationError(null);
                 setNodes(
                     (currentNodes) =>
                         currentNodes.map(
@@ -1065,6 +1215,8 @@ const AutomationBuilder = ({
                     unknown
                 >;
             }) => {
+                hasUserChangesRef.current = true;
+                setValidationError(null);
                 const existingTrigger =
                     trigger;
 
@@ -1199,6 +1351,11 @@ const AutomationBuilder = ({
 
     return (
         <div className="relative h-[560px] min-w-0 w-full overflow-hidden rounded-2xl border border-border bg-surface shadow-sm sm:h-[640px] lg:h-[740px]">
+            {editable && validationError && (
+                <div className="absolute left-1/2 top-5 z-30 w-[min(720px,calc(100%-32px))] -translate-x-1/2 rounded-xl border border-danger/20 bg-danger/5 px-4 py-3 text-sm text-danger shadow-lg backdrop-blur">
+                    {validationError}
+                </div>
+            )}
             {editable && (
                 <div className="absolute left-2 right-2 top-2 z-20 flex items-center justify-between gap-2 rounded-xl border border-border bg-surface/95 p-1.5 shadow-lg backdrop-blur sm:left-5 sm:right-auto sm:top-5">
                     <button
@@ -1283,7 +1440,7 @@ const AutomationBuilder = ({
                 }
                 onEdgesChange={
                     editable
-                        ? onEdgesChange
+                        ? handleEdgesChange
                         : undefined
                 }
                 onNodeClick={

@@ -1,7 +1,12 @@
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { db } from "../client.js";
 import { platformAccounts } from "../schema/platform-accounts.js";
 import { platforms } from "../schema/platforms.js";
+import { contactIdentities } from "../schema/contact-identities.js";
+import { conversations } from "../schema/conversations.js";
+import { webhookEvents } from "../schema/webhook-events.js";
+import { automations } from "../schema/automations.js";
+import { automationExecutions } from "../schema/automation-executions.js";
 
 export async function createPlatformAccount(data: {
     workspaceId: string;
@@ -163,4 +168,109 @@ export async function findPlatformAccountWithPlatform(workspaceId: string, platf
         .limit(1);
 
     return result[0] ?? null;
+}
+
+export async function deletePlatformAccountWithData(
+    workspaceId: string,
+    platformAccountId: string,
+) {
+    return db.transaction(async (tx) => {
+        const accountResult = await tx
+            .select()
+            .from(platformAccounts)
+            .where(
+                and(
+                    eq(platformAccounts.id, platformAccountId),
+                    eq(platformAccounts.workspaceId, workspaceId),
+                ),
+            )
+            .limit(1);
+
+        const account = accountResult[0] ?? null;
+
+        if (!account) {
+            return null;
+        }
+
+        const accountAutomations = await tx
+            .select({
+                id: automations.id,
+            })
+            .from(automations)
+            .where(
+                and(
+                    eq(
+                        automations.workspaceId,
+                        workspaceId,
+                    ),
+                    eq(
+                        automations.platformAccountId,
+                        platformAccountId,
+                    ),
+                ),
+            );
+
+        const automationIds = accountAutomations.map(
+            (automation) => automation.id,
+        );
+
+        if (automationIds.length > 0) {
+            await tx
+                .delete(automationExecutions)
+                .where(
+                    inArray(
+                        automationExecutions.automationId,
+                        automationIds,
+                    ),
+                );
+
+            await tx
+                .delete(automations)
+                .where(
+                    inArray(
+                        automations.id,
+                        automationIds,
+                    ),
+                );
+        }
+
+        await tx
+            .delete(contactIdentities)
+            .where(
+                eq(
+                    contactIdentities.platformAccountId,
+                    platformAccountId,
+                ),
+            );
+
+        await tx
+            .delete(conversations)
+            .where(
+                eq(
+                    conversations.platformAccountId,
+                    platformAccountId,
+                ),
+            );
+
+        await tx
+            .delete(webhookEvents)
+            .where(
+                eq(
+                    webhookEvents.platformAccountId,
+                    platformAccountId,
+                ),
+            );
+
+        const deleted = await tx
+            .delete(platformAccounts)
+            .where(
+                and(
+                    eq(platformAccounts.id, platformAccountId),
+                    eq(platformAccounts.workspaceId, workspaceId),
+                ),
+            )
+            .returning();
+
+        return deleted[0] ?? null;
+    });
 }

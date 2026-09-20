@@ -1,27 +1,16 @@
-import {
-    BadRequestException,
-    ForbiddenException,
-    Injectable,
-    UnauthorizedException,
-} from "@nestjs/common";
-
-import {
-    createOauthState,
-    ENTITLEMENTS,
-    findValidOauthState,
-    markOauthStateUsed,
-    findPlatformAccountByExternalId,
-    createPlatformAccount
-} from "@engagex/db";
-
+import { BadRequestException, ForbiddenException, Injectable, UnauthorizedException } from "@nestjs/common";
+import { createOauthState, ENTITLEMENTS, findValidOauthState, markOauthStateUsed,
+    findPlatformAccountByExternalId, createPlatformAccount, findPlatformAccountById,
+    findWorkspacePlatformAccount, deletePlatformAccountWithData } from "@engagex/db";
 import { randomBytes, createHash } from "node:crypto";
-
 import { SubscriptionsService } from "../../subscriptions/subscriptions.service.js";
+import { InstagramApiClient } from "./api/instagram-api.client.js";
 
 @Injectable()
 export class InstagramService {
     constructor(
         private readonly subscriptionsService: SubscriptionsService,
+        private readonly instagramApiClient: InstagramApiClient,
     ) {}
 
     async getAuthorizationUrl(
@@ -95,18 +84,13 @@ export class InstagramService {
         return `https://www.instagram.com/oauth/authorize?${params.toString()}`;
     }
 
-    async handleCallback(
-        code: string,
-        state: string,
-    ) {
+    async handleCallback(code: string, state: string) {
         const appId = process.env.META_APP_ID;
         const appSecret = process.env.META_APP_SECRET;
         const redirectUri = process.env.META_REDIRECT_URI;
 
         if (!appId || !appSecret || !redirectUri) {
-            throw new BadRequestException(
-                "Instagram integration is not configured",
-            );
+            throw new BadRequestException("Instagram integration is not configured");
         }
 
         // 1. Validate OAuth state
@@ -114,29 +98,19 @@ export class InstagramService {
             .update(state)
             .digest("hex");
 
-        const oauthState =
-            await findValidOauthState(stateHash);
-
+        const oauthState = await findValidOauthState(stateHash);
         if (!oauthState) {
-            throw new UnauthorizedException(
-                "Invalid or expired OAuth state",
-            );
+            throw new UnauthorizedException("Invalid or expired OAuth state");
         }
 
         if (oauthState.provider !== "INSTAGRAM") {
-            throw new UnauthorizedException(
-                "Invalid OAuth provider",
-            );
+            throw new UnauthorizedException("Invalid OAuth provider");
         }
 
         // Prevent replay
-        const usedState =
-            await markOauthStateUsed(oauthState.id);
-
+        const usedState = await markOauthStateUsed(oauthState.id);
         if (!usedState) {
-            throw new UnauthorizedException(
-                "OAuth state has already been used",
-            );
+            throw new UnauthorizedException("OAuth state has already been used");
         }
 
         // 2. Exchange authorization code
@@ -162,101 +136,51 @@ export class InstagramService {
         );
 
         if (!tokenResponse.ok) {
-            const errorBody =
-                await tokenResponse.text();
+            const errorBody = await tokenResponse.text();
 
-            throw new BadRequestException(
-                `Instagram token exchange failed: ${errorBody}`,
-            );
+            throw new BadRequestException(`Instagram token exchange failed: ${errorBody}`);
         }
 
-        const shortLivedToken =
-            await tokenResponse.json();
-
+        const shortLivedToken = await tokenResponse.json();
         if (!shortLivedToken.access_token) {
-            throw new BadRequestException(
-                "Instagram did not return an access token",
-            );
+            throw new BadRequestException("Instagram did not return an access token");
         }
 
         // 3. Exchange short-lived token
         //    for long-lived token
-        const longLivedUrl =
-            new URL(
-                "https://graph.instagram.com/access_token",
-            );
+        const longLivedUrl = new URL("https://graph.instagram.com/access_token");
+        longLivedUrl.searchParams.set("grant_type", "ig_exchange_token");
+        longLivedUrl.searchParams.set("client_secret", appSecret);
+        longLivedUrl.searchParams.set("access_token", shortLivedToken.access_token);
 
-        longLivedUrl.searchParams.set(
-            "grant_type",
-            "ig_exchange_token",
-        );
-
-        longLivedUrl.searchParams.set(
-            "client_secret",
-            appSecret,
-        );
-
-        longLivedUrl.searchParams.set(
-            "access_token",
-            shortLivedToken.access_token,
-        );
-
-        const longLivedResponse =
-            await fetch(longLivedUrl);
+        const longLivedResponse = await fetch(longLivedUrl);
 
         if (!longLivedResponse.ok) {
-            const errorBody =
-                await longLivedResponse.text();
-
-            throw new BadRequestException(
-                `Instagram long-lived token exchange failed: ${errorBody}`,
-            );
+            const errorBody = await longLivedResponse.text();
+            throw new BadRequestException(`Instagram long-lived token exchange failed: ${errorBody}`);
         }
 
-        const longLivedToken =
-            await longLivedResponse.json();
-
+        const longLivedToken = await longLivedResponse.json();
         if (!longLivedToken.access_token) {
-            throw new BadRequestException(
-                "Instagram did not return a long-lived access token",
-            );
+            throw new BadRequestException("Instagram did not return a long-lived access token");
         }
 
         // 4. Fetch connected Instagram account
-        const profileUrl =
-            new URL(
-                "https://graph.instagram.com/me",
-            );
+        const profileUrl = new URL("https://graph.instagram.com/me");
+        profileUrl.searchParams.set("fields", "id,user_id,username");
+        profileUrl.searchParams.set("access_token", longLivedToken.access_token);
 
-        profileUrl.searchParams.set(
-            "fields",
-            "id,user_id,username",
-        );
-
-        profileUrl.searchParams.set(
-            "access_token",
-            longLivedToken.access_token,
-        );
-
-        const profileResponse =
-            await fetch(profileUrl);
+        const profileResponse = await fetch(profileUrl);
 
         if (!profileResponse.ok) {
-            const errorBody =
-                await profileResponse.text();
+            const errorBody = await profileResponse.text();
 
-            throw new BadRequestException(
-                `Failed to fetch Instagram profile: ${errorBody}`,
-            );
+            throw new BadRequestException(`Failed to fetch Instagram profile: ${errorBody}`);
         }
 
-        const profile =
-            await profileResponse.json();
-
+        const profile = await profileResponse.json();
         if (!profile.user_id) {
-            throw new BadRequestException(
-                "Instagram profile did not return user_id",
-            );
+            throw new BadRequestException("Instagram profile did not return user_id");
         }
 
         // 5. Check if this Instagram account
@@ -269,9 +193,7 @@ export class InstagramService {
             );
 
         if (existingAccount) {
-            throw new BadRequestException(
-                "This Instagram account is already connected",
-            );
+            throw new BadRequestException("This Instagram account is already connected");
         }
 
         // 6. Save connected Instagram account
@@ -307,6 +229,296 @@ export class InstagramService {
                 account.username,
             name:
                 account.name,
+        };
+    }
+
+    async testConnection(
+        workspaceId: string,
+        platformAccountId: string,
+    ) {
+        const account = await findPlatformAccountById(
+            platformAccountId,
+        );
+
+        if (!account) {
+            throw new BadRequestException(
+                "Instagram account not found",
+            );
+        }
+
+        if (account.workspaceId !== workspaceId) {
+            throw new UnauthorizedException(
+                "Instagram account does not belong to this workspace",
+            );
+        }
+
+        if (account.platform !== "INSTAGRAM") {
+            throw new BadRequestException(
+                "Platform account is not an Instagram account",
+            );
+        }
+
+        const credentials =
+            account.credentials &&
+            typeof account.credentials === "object" &&
+            !Array.isArray(account.credentials)
+                ? account.credentials as Record<string, unknown>
+                : {};
+
+        const accessToken =
+            typeof credentials.accessToken === "string"
+                ? credentials.accessToken
+                : null;
+
+        if (!accessToken) {
+            throw new BadRequestException(
+                "Instagram access token is missing",
+            );
+        }
+
+        return this.instagramApiClient.getProfile(
+            accessToken,
+        );
+    }
+
+    async sendMessage(
+        workspaceId: string,
+        platformAccountId: string,
+        recipientId: string,
+        text: string,
+    ) {
+        const account = await findWorkspacePlatformAccount(
+            workspaceId,
+            platformAccountId,
+        );
+
+        if (!account) {
+            throw new BadRequestException(
+                "Instagram account not found",
+            );
+        }
+
+        if (account.platform !== "INSTAGRAM") {
+            throw new BadRequestException(
+                "Platform account is not an Instagram account",
+            );
+        }
+
+        const credentials =
+            account.credentials &&
+            typeof account.credentials === "object" &&
+            !Array.isArray(account.credentials)
+                ? account.credentials as Record<string, unknown>
+                : {};
+
+        const accessToken =
+            typeof credentials.accessToken === "string"
+                ? credentials.accessToken
+                : null;
+
+        if (!accessToken) {
+            throw new BadRequestException(
+                "Instagram access token is missing",
+            );
+        }
+
+        if (!account.externalAccountId) {
+            throw new BadRequestException(
+                "Instagram account ID is missing",
+            );
+        }
+
+        if (!text.trim()) {
+            throw new BadRequestException(
+                "Instagram message cannot be empty",
+            );
+        }
+
+        return this.instagramApiClient.sendMessage(
+            accessToken,
+            account.externalAccountId,
+            recipientId,
+            text.trim(),
+        );
+    }
+
+    async subscribeToWebhooks(
+        workspaceId: string,
+        platformAccountId: string,
+    ) {
+        const account = await findPlatformAccountById(
+            platformAccountId,
+        );
+
+        if (!account) {
+            throw new BadRequestException(
+                "Instagram account not found",
+            );
+        }
+
+        if (account.workspaceId !== workspaceId) {
+            throw new UnauthorizedException(
+                "Instagram account does not belong to this workspace",
+            );
+        }
+
+        if (account.platform !== "INSTAGRAM") {
+            throw new BadRequestException(
+                "Platform account is not an Instagram account",
+            );
+        }
+
+        const credentials =
+            account.credentials &&
+            typeof account.credentials === "object" &&
+            !Array.isArray(account.credentials)
+                ? account.credentials as Record<string, unknown>
+                : {};
+
+        const accessToken =
+            typeof credentials.accessToken === "string"
+                ? credentials.accessToken
+                : null;
+
+        if (!accessToken) {
+            throw new BadRequestException(
+                "Instagram access token is missing",
+            );
+        }
+
+        if (!account.externalAccountId) {
+            throw new BadRequestException(
+                "Instagram account ID is missing",
+            );
+        }
+
+        return this.instagramApiClient.subscribeToWebhooks(
+            accessToken,
+            account.externalAccountId,
+        );
+    }
+
+    async getWebhookSubscriptions(
+        workspaceId: string,
+        platformAccountId: string,
+    ) {
+        const account = await findPlatformAccountById(
+            platformAccountId,
+        );
+
+        if (!account) {
+            throw new BadRequestException(
+                "Instagram account not found",
+            );
+        }
+
+        if (account.workspaceId !== workspaceId) {
+            throw new UnauthorizedException(
+                "Instagram account does not belong to this workspace",
+            );
+        }
+
+        if (account.platform !== "INSTAGRAM") {
+            throw new BadRequestException(
+                "Platform account is not an Instagram account",
+            );
+        }
+
+        const credentials =
+            account.credentials &&
+            typeof account.credentials === "object" &&
+            !Array.isArray(account.credentials)
+                ? account.credentials as Record<string, unknown>
+                : {};
+
+        const accessToken =
+            typeof credentials.accessToken === "string"
+                ? credentials.accessToken
+                : null;
+
+        if (!accessToken) {
+            throw new BadRequestException(
+                "Instagram access token is missing",
+            );
+        }
+
+        if (!account.externalAccountId) {
+            throw new BadRequestException(
+                "Instagram account ID is missing",
+            );
+        }
+
+        return this.instagramApiClient.getWebhookSubscriptions(
+            accessToken,
+            account.externalAccountId,
+        );
+    }
+
+    async disconnectInstagramAccount(
+        workspaceId: string,
+        platformAccountId: string,
+    ) {
+        const account = await findWorkspacePlatformAccount(
+            workspaceId,
+            platformAccountId,
+        );
+
+        if (!account) {
+            throw new BadRequestException(
+                "Instagram account not found",
+            );
+        }
+
+        if (account.platform !== "INSTAGRAM") {
+            throw new BadRequestException(
+                "Platform account is not an Instagram account",
+            );
+        }
+
+        const credentials =
+            account.credentials &&
+            typeof account.credentials === "object" &&
+            !Array.isArray(account.credentials)
+                ? account.credentials as Record<string, unknown>
+                : {};
+
+        const accessToken =
+            typeof credentials.accessToken === "string"
+                ? credentials.accessToken
+                : null;
+
+        if (!accessToken) {
+            throw new BadRequestException(
+                "Instagram access token is missing",
+            );
+        }
+
+        if (!account.externalAccountId) {
+            throw new BadRequestException(
+                "Instagram account ID is missing",
+            );
+        }
+
+        await this.instagramApiClient.unsubscribeFromWebhooks(
+            accessToken,
+            account.externalAccountId,
+        );
+
+        const deleted =
+            await deletePlatformAccountWithData(
+                workspaceId,
+                platformAccountId,
+            );
+
+        if (!deleted) {
+            throw new BadRequestException(
+                "Instagram account could not be deleted",
+            );
+        }
+
+        return {
+            success: true,
+            platformAccountId: deleted.id,
         };
     }
 }

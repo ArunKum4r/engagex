@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
     ArrowLeft,
     Eye,
@@ -45,6 +46,9 @@ const AutomationDetailsPage = () => {
     const workspaceId =
         currentWorkspace?.workspace.id;
 
+    const [actionError, setActionError] =
+        useState<string | null>(null);
+
     const {
         data: automation,
         isLoading,
@@ -76,6 +80,9 @@ const AutomationDetailsPage = () => {
         useMutation({
             mutationFn:
                 activateAutomation,
+            onMutate: () => {
+                setActionError(null);
+            },
             onSuccess: () => {
                 if (
                     workspaceId &&
@@ -101,12 +108,22 @@ const AutomationDetailsPage = () => {
                     );
                 }
             },
+            onError: (error) => {
+                setActionError(
+                    error instanceof Error
+                        ? error.message
+                        : "Unable to activate automation.",
+                );
+            },
         });
 
     const pauseMutation =
         useMutation({
             mutationFn:
                 pauseAutomation,
+            onMutate: () => {
+                setActionError(null);
+            },
             onSuccess: () => {
                 if (
                     workspaceId &&
@@ -121,7 +138,23 @@ const AutomationDetailsPage = () => {
                                 ),
                         },
                     );
+
+                    void queryClient.invalidateQueries(
+                        {
+                            queryKey:
+                                queryKeys.automations.all(
+                                    workspaceId,
+                                ),
+                        },
+                    );
                 }
+            },
+            onError: (error) => {
+                setActionError(
+                    error instanceof Error
+                        ? error.message
+                        : "Unable to pause automation.",
+                );
             },
         });
 
@@ -143,6 +176,13 @@ const AutomationDetailsPage = () => {
 
                 navigate(
                     "/automations",
+                );
+            },
+            onError: (error) => {
+                setActionError(
+                    error instanceof Error
+                        ? error.message
+                        : "Unable to delete automation.",
                 );
             },
         });
@@ -178,6 +218,8 @@ const AutomationDetailsPage = () => {
 
     const handleDelete =
         () => {
+            setActionError(null);
+
             if (
                 !workspaceId ||
                 !automationId
@@ -339,19 +381,21 @@ const AutomationDetailsPage = () => {
                         Preview
                     </Button>
 
-                    <Button
-                        variant="secondary"
-                        onClick={() =>
-                            navigate(
-                                `/automations/${automationId}/edit`,
-                            )
-                        }
-                    >
-                        <Pencil
-                            size={16}
-                        />
-                        Edit
-                    </Button>
+                    {!isActive && (
+                        <Button
+                            variant="secondary"
+                            onClick={() =>
+                                navigate(
+                                    `/automations/${automationId}/edit`,
+                                )
+                            }
+                        >
+                            <Pencil
+                                size={16}
+                            />
+                            Edit
+                        </Button>
+                    )}
 
                     <Button
                         variant="danger"
@@ -369,6 +413,12 @@ const AutomationDetailsPage = () => {
                     </Button>
                 </div>
             </div>
+
+            {actionError && (
+                <div className="rounded-xl border border-danger/20 bg-danger/5 px-4 py-3 text-sm text-danger">
+                    {actionError}
+                </div>
+            )}
 
             <div className="grid min-w-0 gap-6 lg:grid-cols-3">
                 <section className="min-w-0 overflow-hidden rounded-2xl border border-border bg-surface shadow-sm lg:col-span-2">

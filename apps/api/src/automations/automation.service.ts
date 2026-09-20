@@ -98,16 +98,25 @@ export class AutomationService {
 
     async activate(workspaceId: string, automationId: string) {
         const automation = await this.findOne(workspaceId, automationId);
+
         if (automation.status === "ACTIVE") {
             throw new ConflictException("Automation is already active");
         }
 
-        const updated = await activateAutomation(automationId);
-        if (!updated) {
+        const result = await activateAutomation(automationId);
+
+        if (!result.success) {
+            throw new ConflictException({
+                message: "Automation cannot be activated",
+                errors: result.errors,
+            });
+        }
+
+        if (!result.automation) {
             throw new NotFoundException("Automation not found");
         }
 
-        return updated;
+        return result.automation;
     }
 
     async pause(workspaceId: string, automationId: string) {
