@@ -10,6 +10,7 @@ import {
     findAutomationWithGraph,
     updateAutomationExecution,
     updateAutomationExecutionStep,
+    findActiveAutomationTriggers
 } from "@engagex/db";
 
 import type { AutomationExecutionContext } from "./execution-context.js";
@@ -23,13 +24,20 @@ export class AutomationExecutionService {
         private readonly stepExecutor: AutomationStepExecutorService,
     ) {}
 
-    async execute(automationId: string, input: Record<string, unknown> = {}, dryRun = true) {
-        const automation = await findAutomationWithGraph(automationId);
-        if (!automation) {
+    async execute(automationId: string, input: Record<string, unknown> = {}, dryRun = true, platformAccountId?: string) {
+        const graph = await findAutomationWithGraph(automationId);
+        if (!graph) {
             throw new NotFoundException("Automation not found");
         }
+        
+        const automation = graph.automation;
+        console.log("Automation execution context source:", {
+    automationId,
+    workspaceId: automation?.workspaceId,
+    platformAccountId: automation?.platformAccountId,
+});
 
-        const trigger = automation.triggers[0] ?? null;
+        const trigger = graph.triggers[0] ?? null;
 
         if (!trigger?.entryStepId) {
             throw new NotFoundException(
@@ -54,7 +62,7 @@ export class AutomationExecutionService {
             variables: {},
             dryRun,
             workspaceId: automation.workspaceId,
-            platformAccountId: automation.platformAccountId,
+            platformAccountId: platformAccountId ?? automation.platformAccountId,
 
         };
 
@@ -65,8 +73,8 @@ export class AutomationExecutionService {
         try {
             await this.executeFromStep(
                 trigger.entryStepId,
-                automation.steps,
-                automation.edges,
+                graph.steps,
+                graph.edges,
                 context,
             );
 
@@ -242,5 +250,152 @@ export class AutomationExecutionService {
             executionId,
             steps: executionSteps,
         };
+    }
+    
+    async executeFromTrigger(
+        platformAccountId: string,
+        input: Record<string, unknown> = {},
+        dryRun = false,
+        eventType?: string
+    ) {
+        const activeTriggers =
+            await findActiveAutomationTriggers(
+                platformAccountId,
+            );
+
+        const results: Array<{
+            automationId: string;
+            result: {
+                executionId: string;
+                steps: unknown[];
+            };
+        }> = [];
+
+        for (const item of activeTriggers) {
+            if (eventType && item.trigger.type !== eventType) {
+                continue;
+            }
+
+            const matched = this.matchesTrigger(
+                item.trigger.type,
+                item.trigger.config,
+                input,
+            );
+            console.log("Automation trigger check:", {
+                automationId: item.automation.id,
+                triggerType: item.trigger.type,
+                triggerConfig: item.trigger.config,
+                message: input.message,
+                matched,
+            });
+
+            if (!matched) {
+                continue;
+            }
+
+            console.log("Starting automation execution:", {
+                automationId: item.automation.id,
+            });
+            const result = await this.execute(
+                item.automation.id,
+                input,
+                dryRun,
+                platformAccountId
+            );
+            console.log("Automation execution finished:", result);
+
+            results.push({
+                automationId: item.automation.id,
+                result,
+            });
+        }
+
+        return results;
+    }
+
+    private matchesTrigger(
+        triggerType: string,
+        config: unknown,
+        input: Record<string, unknown>,
+    ) {
+        if (
+            triggerType !== "INSTAGRAM_DM" &&
+            triggerType !== "INSTAGRAM_COMMENT" &&
+            triggerType !== "INSTAGRAM_STORY_REPLY"
+        ) {
+            return false;
+        }
+
+        const triggerConfig =
+            config &&
+            typeof config === "object" &&
+            !Array.isArray(config)
+                ? config as Record<string, unknown>
+                : {};
+        
+        if (triggerType === "INSTAGRAM_STORY_REPLY") {
+            return true;
+        }
+
+        if (triggerType === "INSTAGRAM_COMMENT") {
+            const target =
+                triggerConfig.target === "SPECIFIC"
+                    ? "SPECIFIC"
+                    : "ALL";
+
+            if (target === "SPECIFIC") {
+                const contentId =
+                    typeof triggerConfig.contentId === "string"
+                        ? triggerConfig.contentId
+                        : "";
+
+                const mediaId =
+                    typeof input.mediaId === "string"
+                        ? input.mediaId
+                        : "";
+
+                if (!contentId || !mediaId || contentId !== mediaId) {
+                    return false;
+                }
+            }
+        }
+
+        const keywords =
+            Array.isArray(triggerConfig.keywords)
+                ? triggerConfig.keywords.filter(
+                    (keyword): keyword is string =>
+                        typeof keyword === "string" &&
+                        keyword.trim().length > 0,
+                )
+                : [];
+
+        if (keywords.length === 0) {
+            return true;
+        }
+
+        const message =
+            typeof input.message === "string"
+                ? input.message.trim().toLowerCase()
+                : "";
+
+        if (!message) {
+            return false;
+        }
+
+        const matchedKeywords =
+            keywords.filter((keyword) =>
+                message.includes(
+                    keyword.trim().toLowerCase(),
+                ),
+            );
+
+        const matchMode =
+            triggerConfig.match === "ALL"
+                ? "ALL"
+                : "ANY";
+
+        return matchMode === "ALL"
+            ? matchedKeywords.length === keywords.length
+            : matchedKeywords.length > 0;
     }
 }

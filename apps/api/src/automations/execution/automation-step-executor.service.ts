@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, NotFoundException } from "@nestjs/common";
 
 import type { AutomationExecutionContext } from "./execution-context.js";
 import type {
@@ -7,6 +7,7 @@ import type {
 } from "./step-executor.js";
 import type { AutomationStepResult } from "./step-results.js";
 import { InstagramService } from "../../integrations/instagram/instagram.service.js";
+import { findAutomationWithGraph } from "@engagex/db";
 
 @Injectable()
 export class AutomationStepExecutorService implements AutomationStepExecutor {

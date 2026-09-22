@@ -58,6 +58,7 @@ const AutomationBuilder = ({ workspaceId, automationId, editable = false }: Auto
     const [selectedNode, setSelectedNode] = useState<Node | null>(null);
     const [trigger, setTrigger] = useState<AutomationGraphTrigger | null>(null);
     const [platform, setPlatform] = useState<string | null>(null);
+    const [platformAccountId, setPlatformAccountId] = useState<string | null>(null);
 
     const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -129,17 +130,18 @@ const AutomationBuilder = ({ workspaceId, automationId, editable = false }: Auto
                 automationId,
             );
 
-            const platformAccountId =
-                data.automation.platformAccountId;
+            const loadedPlatformAccountId =
+                data.automation.platformAccountId ?? null;
+
+            setPlatformAccountId(loadedPlatformAccountId);
 
             let loadedPlatform: string | null = null;
 
-            if (platformAccountId) {
-                const account =
-                    await getPlatformAccount(
-                        workspaceId,
-                        platformAccountId,
-                    );
+            if (loadedPlatformAccountId) {
+                const account = await getPlatformAccount(
+                    workspaceId,
+                    loadedPlatformAccountId,
+                );
 
                 loadedPlatform = account.platform;
                 setPlatform(account.platform);
@@ -1426,6 +1428,8 @@ const AutomationBuilder = ({ workspaceId, automationId, editable = false }: Auto
                         onChange={
                             handleNodeConfigChange
                         }
+                    platformAccountId={platformAccountId}
+                    workspaceId={workspaceId}
                     />
                 )}
 

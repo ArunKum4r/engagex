@@ -63,26 +63,16 @@ export class InstagramApiClient {
         if (!response.ok) {
             const errorBody = await response.text();
 
-            throw new BadRequestException(
-                `Instagram message failed: ${errorBody}`,
-            );
+            throw new BadRequestException(`Instagram message failed: ${errorBody}`);
         }
 
         return response.json();
     }
 
-    async subscribeToWebhooks(
-        accessToken: string,
-        instagramUserId: string,
-    ) {
-        const url = new URL(
-            `${this.baseUrl}/v26.0/${instagramUserId}/subscribed_apps`,
-        );
+    async subscribeToWebhooks(accessToken: string, instagramUserId: string) {
+        const url = new URL(`${this.baseUrl}/v26.0/${instagramUserId}/subscribed_apps`);
 
-        url.searchParams.set(
-            "subscribed_fields",
-            "messages,comments,messaging_postbacks",
-        );
+        url.searchParams.set("subscribed_fields", "messages,comments,messaging_postbacks");
 
         const response = await fetch(url, {
             method: "POST",
@@ -94,21 +84,14 @@ export class InstagramApiClient {
         const body = await response.text();
 
         if (!response.ok) {
-            throw new BadRequestException(
-                `Instagram webhook subscription failed: ${body}`,
-            );
+            throw new BadRequestException(`Instagram webhook subscription failed: ${body}`);
         }
 
         return JSON.parse(body);
     }
 
-    async getWebhookSubscriptions(
-        accessToken: string,
-        instagramUserId: string,
-    ) {
-        const url = new URL(
-            `${this.baseUrl}/v26.0/${instagramUserId}/subscribed_apps`,
-        );
+    async getWebhookSubscriptions(accessToken: string, instagramUserId: string) {
+        const url = new URL(`${this.baseUrl}/v26.0/${instagramUserId}/subscribed_apps`);
 
         const response = await fetch(url, {
             headers: {
@@ -119,18 +102,14 @@ export class InstagramApiClient {
         const body = await response.text();
 
         if (!response.ok) {
-            throw new BadRequestException(
-                `Instagram webhook subscriptions failed: ${body}`,
-            );
+            throw new BadRequestException(`Instagram webhook subscriptions failed: ${body}`);
         }
 
         return JSON.parse(body);
     }
 
     async unsubscribeFromWebhooks(accessToken: string, instagramUserId: string) {
-        const url = new URL(
-            `${this.baseUrl}/v26.0/${instagramUserId}/subscribed_apps`,
-        );
+        const url = new URL(`${this.baseUrl}/v26.0/${instagramUserId}/subscribed_apps`);
 
         const response = await fetch(url, {
             method: "DELETE",
@@ -142,11 +121,65 @@ export class InstagramApiClient {
         const body = await response.text();
 
         if (!response.ok) {
-            throw new BadRequestException(
-                `Instagram webhook unsubscribe failed: ${body}`,
-            );
+            throw new BadRequestException(`Instagram webhook unsubscribe failed: ${body}`);
         }
 
         return body ? JSON.parse(body) : { success: true };
+    }
+
+    async getUserProfile(accessToken: string, instagramScopedUserId: string) {
+        const url = new URL(`${this.baseUrl}/v26.0/${instagramScopedUserId}`);
+
+        const response = await fetch(url, {
+            headers: {
+                Authorization: `Bearer ${accessToken}`,
+            },
+        });
+
+        const body = await response.text();
+
+        if (!response.ok) {
+            throw new BadRequestException(`Instagram user profile request failed: ${body}`);
+        }
+
+        return JSON.parse(body);
+    }
+
+    async getMedia(
+        accessToken: string,
+        instagramUserId: string,
+    ) {
+        const url = new URL(
+            `${this.baseUrl}/v26.0/${instagramUserId}/media`,
+        );
+
+        url.searchParams.set(
+            "fields",
+            [
+                "id",
+                "caption",
+                "media_type",
+                "media_product_type",
+                "thumbnail_url",
+                "media_url",
+                "permalink",
+                "timestamp",
+            ].join(","),
+        );
+
+        url.searchParams.set("limit", "50");
+        url.searchParams.set("access_token", accessToken);
+
+        const response = await fetch(url);
+
+        const body = await response.text();
+
+        if (!response.ok) {
+            throw new BadRequestException(
+                `Instagram media request failed: ${body}`,
+            );
+        }
+
+        return JSON.parse(body);
     }
 }

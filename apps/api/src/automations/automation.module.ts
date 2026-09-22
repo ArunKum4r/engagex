@@ -1,4 +1,4 @@
-import { Module } from "@nestjs/common";
+import { Module, forwardRef } from "@nestjs/common";
 import { AutomationController } from "./automation.controller.js";
 import { AutomationService } from "./automation.service.js";
 import { SubscriptionsModule } from "../subscriptions/subscriptions.module.js";
@@ -7,7 +7,7 @@ import { AutomationStepExecutorService } from "./execution/automation-step-execu
 import { IntegrationModule } from "../integrations/integration.module.js";
 
 @Module({
-    imports: [SubscriptionsModule, IntegrationModule],
+    imports: [SubscriptionsModule, forwardRef(() => IntegrationModule)],
     controllers: [ AutomationController ],
     providers: [ AutomationService, AutomationExecutionService, AutomationStepExecutorService ],
     exports: [ AutomationExecutionService ]

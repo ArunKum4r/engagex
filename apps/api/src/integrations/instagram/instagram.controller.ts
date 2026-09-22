@@ -10,7 +10,7 @@ import {
     UnauthorizedException,
     UseGuards,
 } from "@nestjs/common";
-import type { response, Response } from "express";
+import type { Response } from "express";
 import { AuthGuard } from "../../auth/auth.guard.js";
 import type { AuthenticatedRequest } from "../../auth/auth.types.js";
 import { InstagramService } from "./instagram.service.js";
@@ -116,6 +116,21 @@ export class InstagramController {
         @Param("platformAccountId") platformAccountId: string,
     ) {
         return this.instagramService.disconnectInstagramAccount(
+            workspaceId,
+            platformAccountId,
+        );
+    }
+
+    @Get(
+        "workspaces/:workspaceId/integrations/instagram/:platformAccountId/media",
+    )
+    @UseGuards(AuthGuard, WorkspaceRoleGuard)
+    @RequireWorkspaceRole("OWNER", "ADMIN")
+    async getMedia(
+        @Param("workspaceId") workspaceId: string,
+        @Param("platformAccountId") platformAccountId: string,
+    ) {
+        return this.instagramService.getMedia(
             workspaceId,
             platformAccountId,
         );

@@ -1,4 +1,4 @@
-import { eq, and } from "drizzle-orm";
+import { eq, and, ne } from "drizzle-orm";
 import { db } from "../client.js";
 import { automations } from "../schema/automations.js";
 import { automationTriggers } from "../schema/automation-triggers.js";
@@ -30,18 +30,18 @@ export async function createAutomation(data: {
     return result[0] ?? null;
 }
 
-export async function findWorkspaceAutomations(workspaceId: string) {
-    const result = await db
+export async function findWorkspaceAutomations(
+    workspaceId: string,
+) {
+    return db
         .select()
         .from(automations)
         .where(
-            eq(
-                automations.workspaceId,
-                workspaceId,
+            and(
+                eq(automations.workspaceId, workspaceId),
+                ne(automations.status, "ARCHIVED"),
             ),
         );
-
-    return result;
 }
 
 export async function findAutomationById(automationId: string) {
@@ -123,15 +123,16 @@ export async function updateAutomation(
     return result[0] ?? null;
 }
 
-export async function deleteAutomation(automationId: string) {
+export async function deleteAutomation(
+    automationId: string,
+) {
     const result = await db
-        .delete(automations)
-        .where(
-            eq(
-                automations.id,
-                automationId,
-            ),
-        )
+        .update(automations)
+        .set({
+            status: "ARCHIVED",
+            updatedAt: new Date(),
+        })
+        .where(eq(automations.id, automationId))
         .returning();
 
     return result[0] ?? null;

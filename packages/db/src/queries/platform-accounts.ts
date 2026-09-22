@@ -274,3 +274,15 @@ export async function deletePlatformAccountWithData(
         return deleted[0] ?? null;
     });
 }
+
+export async function findPlatformAccountsByExternalId(
+    platform: string,
+    externalAccountId: string,
+) {
+    return db.select()
+        .from(platformAccounts)
+        .where(and(
+            eq(platformAccounts.platform, platform),
+            eq(platformAccounts.externalAccountId, externalAccountId),
+        ));
+}

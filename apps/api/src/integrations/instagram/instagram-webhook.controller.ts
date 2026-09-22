@@ -9,8 +9,18 @@ import {
 
 import type { Request, Response } from "express";
 
+import {
+    processInstagramMessageWebhook,
+} from "@engagex/db";
+import { InstagramService } from "./instagram.service.js";
+import { AutomationExecutionService } from "../../automations/execution/automation-execution.service.js";
+
 @Controller("integrations/instagram/webhook")
 export class InstagramWebhookController {
+    constructor(
+        private readonly instagramService: InstagramService,
+        private readonly automationExecutionService: AutomationExecutionService
+    ) {}
     @Get()
     verify(
         @Query("hub.mode") mode: string,
@@ -35,19 +45,160 @@ export class InstagramWebhookController {
             .status(200)
             .send(challenge);
     }
-    
+
     @Post()
     async receive(
         @Req() request: Request,
         @Res() response: Response,
     ) {
-        console.log("========== INSTAGRAM WEBHOOK ==========");
-        console.log("Headers:", request.headers);
+        const body = request.body as {
+            entry?: Array<{
+                id?: string;
+                time?: number | string;
+                messaging?: Array<{
+                    sender?: {
+                        id?: string;
+                    };
+                    recipient?: {
+                        id?: string;
+                    };
+                    timestamp?: number | string;
+                    message?: {
+                        mid?: string;
+                        text?: string;
+                        is_echo?: boolean;
+                        reply_to?: {
+                            story?: {
+                                id?: string;
+                                url?: string;
+                            };
+                        };
+                    };
+                }>;
+                changes?: Array<{
+                    field?: string;
+                    value?: {
+                        from?: {
+                            id?: string;
+                            username?: string;
+                        };
+                        id?: string;
+                        text?: string;
+                        media?: {
+                            id?: string;
+                            media_product_type?: string;
+                        };
+                    };
+                }>;
+            }>;
+        };
+
         console.log(
-            "Body:",
-            JSON.stringify(request.body, null, 2),
+            "Instagram webhook received:",
+            JSON.stringify(body, null, 2),
         );
-        console.log("=======================================");
+
+        for (const entry of body.entry ?? []) {
+            for (const messaging of entry.messaging ?? []) {
+                const senderId = messaging.sender?.id;
+                const recipientId = messaging.recipient?.id;
+                const messageId = messaging.message?.mid;
+                const storyReply = messaging.message?.reply_to?.story;
+
+                const eventType = storyReply ? "INSTAGRAM_STORY_REPLY" : "INSTAGRAM_DM";
+
+                if (!senderId || !recipientId || !messageId) {
+                    continue;
+                }
+
+                if (messaging.message?.is_echo) {
+                    continue;
+                }
+
+                const result =
+                    await this.instagramService.processWebhookMessage({
+                        senderId,
+                        recipientId,
+                        messageId,
+                        text: messaging.message?.text ?? null,
+                        timestamp: Number(messaging.timestamp),
+                        payload: body as Record<string, unknown>,
+                    });
+
+                console.log("Instagram message processed:", result);
+
+                if (!result.duplicate) {
+                    console.log("Executing Instagram automation:", {
+                        platformAccountId: result.platformAccountId,
+                        message: messaging.message?.text ?? "",
+                    });
+                    await this.automationExecutionService.executeFromTrigger(
+                        result.platformAccountId,
+                        {
+                            recipientId: senderId,
+                            senderId,
+                            message: messaging.message?.text ?? "",
+                            contactId: result.contactId,
+                            contactIdentityId: result.contactIdentityId,
+                            conversationId: result.conversationId,
+                            messageId: result.messageId,
+                            storyId: storyReply?.id ?? null,
+                            storyUrl: storyReply?.url ?? null
+                        },
+                        false,
+                        eventType
+                    );
+                }
+            }
+
+            for (const change of entry.changes ?? []) {
+                if (change.field !== "comments") {
+                    continue;
+                }
+
+                const comment = change.value;
+
+                const senderId = comment?.from?.id;
+                const commentId = comment?.id;
+
+                if (!entry.id || !senderId || !commentId) {
+                    continue;
+                }
+
+                const result =
+                    await this.instagramService.processWebhookComment({
+                        recipientId: entry.id,
+                        commentId,
+                        senderId,
+                        username: comment.from?.username,
+                        text: comment.text,
+                        mediaId: comment.media?.id,
+                        mediaType: comment.media?.media_product_type,
+                    });
+                
+                if (!result.duplicate) {
+                    console.log("Executing Instagram comment automation:", {
+                        platformAccountId: result.comment.platformAccountId,
+                        comment: comment.text ?? "",
+                    });
+
+                    await this.automationExecutionService.executeFromTrigger(
+                        result.comment.platformAccountId,
+                        {
+                            recipientId: senderId,
+                            senderId,
+                            message: comment.text ?? "",
+                            commentId,
+                            mediaId: comment.media?.id,
+                            mediaType: comment.media?.media_product_type,
+                        },
+                        false,
+                    );
+                }
+
+                console.log("Instagram comment processed:", result);
+            }
+        }
 
         return response.status(200).send("EVENT_RECEIVED");
     }
