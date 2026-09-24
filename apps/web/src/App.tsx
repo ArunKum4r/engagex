@@ -23,6 +23,9 @@ import AutomationPreviewPage from "./pages/automations/AutomationPreviewPage.js"
 import PrivacyPolicy from "./pages/PrivacyPolicy.js";
 import TermsOfService from "./pages/TermsOfService.js";
 import DataDeletion from "./pages/DataDeletion.js";
+import Contacts from "./pages/contacts/ContactsListPage.js";
+import ContactDetailsPage from "./pages/contacts/ContactDetailsPage.js";
+import Inbox from "./pages/inbox/InboxPage.js";
 
 const App = () => {
     useTheme();
@@ -63,6 +66,9 @@ const App = () => {
                         <Route path="/integrations" element={<IntegrationsPage />}/>
                         <Route path="/integrations/:integrationSlug" element={<IntegrationDetailsPage />}/>
                         <Route path="/integrations/:integrationSlug/accounts/:accountId" element={<IntegrationAccountPage />}/>
+                        <Route path="/contacts" element={<Contacts />} />
+                        <Route path="/contacts/:contactId" element={<ContactDetailsPage />} />
+                        <Route path="/inbox" element={<Inbox />} />
 
                         <Route
                             path="/settings"

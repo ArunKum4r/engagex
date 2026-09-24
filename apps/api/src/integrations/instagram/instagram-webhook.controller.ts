@@ -103,15 +103,17 @@ export class InstagramWebhookController {
                 const senderId = messaging.sender?.id;
                 const recipientId = messaging.recipient?.id;
                 const messageId = messaging.message?.mid;
-                const storyReply = messaging.message?.reply_to?.story;
+                const storyReply =
+                    messaging.message?.reply_to?.story;
 
-                const eventType = storyReply ? "INSTAGRAM_STORY_REPLY" : "INSTAGRAM_DM";
+                const isEcho =
+                    messaging.message?.is_echo === true;
+
+                const eventType = storyReply
+                    ? "INSTAGRAM_STORY_REPLY"
+                    : "INSTAGRAM_DM";
 
                 if (!senderId || !recipientId || !messageId) {
-                    continue;
-                }
-
-                if (messaging.message?.is_echo) {
                     continue;
                 }
 
@@ -123,15 +125,15 @@ export class InstagramWebhookController {
                         text: messaging.message?.text ?? null,
                         timestamp: Number(messaging.timestamp),
                         payload: body as Record<string, unknown>,
+                        isEcho,
                     });
 
-                console.log("Instagram message processed:", result);
+                console.log(
+                    "Instagram message processed:",
+                    result,
+                );
 
-                if (!result.duplicate) {
-                    console.log("Executing Instagram automation:", {
-                        platformAccountId: result.platformAccountId,
-                        message: messaging.message?.text ?? "",
-                    });
+                if (!result.duplicate && !isEcho) {
                     await this.automationExecutionService.executeFromTrigger(
                         result.platformAccountId,
                         {
@@ -139,14 +141,16 @@ export class InstagramWebhookController {
                             senderId,
                             message: messaging.message?.text ?? "",
                             contactId: result.contactId,
-                            contactIdentityId: result.contactIdentityId,
-                            conversationId: result.conversationId,
+                            contactIdentityId:
+                                result.contactIdentityId,
+                            conversationId:
+                                result.conversationId,
                             messageId: result.messageId,
                             storyId: storyReply?.id ?? null,
-                            storyUrl: storyReply?.url ?? null
+                            storyUrl: storyReply?.url ?? null,
                         },
                         false,
-                        eventType
+                        eventType,
                     );
                 }
             }
@@ -191,6 +195,7 @@ export class InstagramWebhookController {
                             commentId,
                             mediaId: comment.media?.id,
                             mediaType: comment.media?.media_product_type,
+                            contactId: result.contactId,
                         },
                         false,
                     );

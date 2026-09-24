@@ -2,7 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, UnauthorizedExcept
 import { createOauthState, ENTITLEMENTS, findValidOauthState, markOauthStateUsed,
     findPlatformAccountByExternalId, createPlatformAccount, findPlatformAccountById,
     findWorkspacePlatformAccount, deletePlatformAccountWithData, findPlatformAccountsByExternalId, processInstagramMessageWebhook,
-    processInstagramCommentWebhook } from "@engagex/db";
+    processInstagramCommentWebhook, processInstagramOutboundWebhook } from "@engagex/db";
 import { randomBytes, createHash } from "node:crypto";
 import { SubscriptionsService } from "../../subscriptions/subscriptions.service.js";
 import { InstagramApiClient } from "./api/instagram-api.client.js";
@@ -530,7 +530,18 @@ export class InstagramService {
         text?: string | null;
         timestamp: number;
         payload: Record<string, unknown>;
+        isEcho?: boolean;
     }) {
+        if (data.isEcho) {
+            return processInstagramOutboundWebhook({
+                senderId: data.senderId,
+                recipientId: data.recipientId,
+                messageId: data.messageId,
+                text: data.text ?? null,
+                timestamp: data.timestamp,
+                payload: data.payload,
+            });
+        }
         const accounts = await findPlatformAccountsByExternalId(
             "INSTAGRAM",
             data.recipientId,

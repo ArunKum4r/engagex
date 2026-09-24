@@ -51,3 +51,5 @@ export * from "./admin-invitations.js";
 export * from "./oauth-states.js";
 export * from "./platforms.js";
 export * from "./comments.js";
+export * from "./contact-automation-pauses.js";
+export * from "./conversation-reminders.js";

@@ -5,10 +5,13 @@ import {
     ChevronRight,
     CreditCard,
     LayoutDashboard,
+    MessageCircle,
     Settings,
+    Users,
     X,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
+
 import WorkspaceSelector from "./WorkspaceSelector";
 
 interface SidebarProps {
@@ -23,6 +26,16 @@ const navigation = [
         label: "Dashboard",
         href: "/dashboard",
         icon: LayoutDashboard,
+    },
+    {
+        label: "Inbox",
+        href: "/inbox",
+        icon: MessageCircle,
+    },
+    {
+        label: "Contacts",
+        href: "/contacts",
+        icon: Users,
     },
     {
         label: "Automations",
@@ -49,7 +62,7 @@ const Sidebar = ({
                     type="button"
                     aria-label="Close sidebar"
                     onClick={onClose}
-                    className="fixed inset-0 z-40 bg-black/40 lg:hidden"
+                    className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[1px] lg:hidden"
                 />
             )}
 
@@ -57,21 +70,18 @@ const Sidebar = ({
                 className={[
                     "fixed inset-y-0 left-0 z-50 flex flex-col",
                     "border-r border-border bg-surface",
-                    "transition-all duration-200",
+                    "transition-[width,transform] duration-200 ease-out",
                     "lg:static lg:z-auto",
                     mobileOpen
                         ? "translate-x-0"
                         : "-translate-x-full lg:translate-x-0",
-                    open
-                        ? "w-64"
-                        : "w-16",
+                    open ? "w-64" : "w-16",
                 ].join(" ")}
             >
                 {/* Header */}
-
                 <div
                     className={[
-                        "flex h-16 shrink-0 items-center border-b border-border",
+                        "relative flex h-16 shrink-0 items-center border-b border-border",
                         open
                             ? "justify-between px-4"
                             : "justify-center",
@@ -80,14 +90,14 @@ const Sidebar = ({
                     <NavLink
                         to="/dashboard"
                         onClick={onClose}
-                        className="flex items-center gap-3"
+                        className="flex min-w-0 items-center gap-3"
                     >
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent text-sm font-bold text-accent-foreground">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent text-sm font-bold text-accent-foreground shadow-sm">
                             E
                         </div>
 
                         {open && (
-                            <span className="text-lg font-semibold tracking-tight text-text">
+                            <span className="truncate text-lg font-semibold tracking-tight text-text">
                                 EngageX
                             </span>
                         )}
@@ -97,7 +107,7 @@ const Sidebar = ({
                         <button
                             type="button"
                             onClick={onToggle}
-                            className="hidden h-8 w-8 items-center justify-center rounded-md text-text-muted hover:bg-surface-muted hover:text-text lg:flex"
+                            className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface-muted hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 lg:flex"
                             aria-label="Collapse sidebar"
                         >
                             <ChevronLeft size={18} />
@@ -108,7 +118,7 @@ const Sidebar = ({
                         <button
                             type="button"
                             onClick={onToggle}
-                            className="absolute right-[-14px] top-5 hidden h-7 w-7 items-center justify-center rounded-full border border-border bg-surface text-text-muted shadow-sm hover:text-text lg:flex"
+                            className="absolute right-[-14px] top-5 hidden h-7 w-7 items-center justify-center rounded-full border border-border bg-surface text-text-muted shadow-sm transition-colors hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 lg:flex"
                             aria-label="Expand sidebar"
                         >
                             <ChevronRight size={15} />
@@ -118,19 +128,17 @@ const Sidebar = ({
                     <button
                         type="button"
                         onClick={onClose}
-                        className="absolute right-3 top-5 flex h-8 w-8 items-center justify-center rounded-md text-text-muted hover:bg-surface-muted hover:text-text lg:hidden"
+                        className="absolute right-3 top-5 flex h-8 w-8 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface-muted hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 lg:hidden"
                         aria-label="Close sidebar"
                     >
                         <X size={18} />
                     </button>
                 </div>
 
-                {/* Workspace selector */}
-
+                {/* Workspace */}
                 {open && <WorkspaceSelector />}
 
                 {/* Navigation */}
-
                 <nav className="flex-1 overflow-y-auto px-2 py-4">
                     {open && (
                         <p className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-text-muted">
@@ -154,18 +162,27 @@ const Sidebar = ({
                                     }
                                     className={({ isActive }) =>
                                         [
-                                            "flex items-center rounded-md py-2.5 text-sm font-medium transition-colors",
+                                            "group flex items-center rounded-lg py-2.5 text-sm font-medium transition-colors",
                                             open
                                                 ? "gap-3 px-3"
                                                 : "justify-center px-0",
                                             isActive
                                                 ? "bg-accent/10 text-accent"
-                                                : "text-text-secondary hover:bg-surface-muted hover:text-text",
+                                                : "text-text-secondary hover:bg-surface-muted/70 hover:text-text",
                                         ].join(" ")
                                     }
                                 >
-                                    <Icon size={18} />
-                                    {open && item.label}
+                                    <Icon
+                                        size={18}
+                                        strokeWidth={1.9}
+                                        className="shrink-0"
+                                    />
+
+                                    {open && (
+                                        <span className="truncate">
+                                            {item.label}
+                                        </span>
+                                    )}
                                 </NavLink>
                             );
                         })}
@@ -173,10 +190,8 @@ const Sidebar = ({
                 </nav>
 
                 {/* Bottom area */}
-
                 <div className="shrink-0 border-t border-border p-2">
                     {/* Plan */}
-
                     <div
                         className={
                             open
@@ -187,7 +202,7 @@ const Sidebar = ({
                         {open ? (
                             <>
                                 <div className="flex items-start justify-between gap-2">
-                                    <div>
+                                    <div className="min-w-0">
                                         <p className="text-xs font-semibold text-text">
                                             Pro Plan
                                         </p>
@@ -199,13 +214,13 @@ const Sidebar = ({
 
                                     <CreditCard
                                         size={16}
-                                        className="text-accent"
+                                        className="shrink-0 text-accent"
                                     />
                                 </div>
 
                                 <button
                                     type="button"
-                                    className="mt-3 text-xs font-medium text-accent hover:text-accent-hover"
+                                    className="mt-3 text-xs font-medium text-accent transition-colors hover:text-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
                                 >
                                     Manage plan
                                 </button>
@@ -214,7 +229,7 @@ const Sidebar = ({
                             <button
                                 type="button"
                                 title="Manage plan"
-                                className="flex h-9 w-9 items-center justify-center rounded-md text-text-secondary hover:bg-surface-muted hover:text-text"
+                                    className="flex h-9 w-9 items-center justify-center rounded-lg text-text-secondary transition-colors hover:bg-surface-muted hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
                             >
                                 <CreditCard size={18} />
                             </button>
@@ -222,18 +237,13 @@ const Sidebar = ({
                     </div>
 
                     {/* Settings */}
-
                     <NavLink
                         to="/settings"
                         onClick={onClose}
-                        title={
-                            open
-                                ? undefined
-                                : "Settings"
-                        }
+                        title={open ? undefined : "Settings"}
                         className={({ isActive }) =>
                             [
-                                "mb-2 flex items-center rounded-md py-2.5 text-sm font-medium transition-colors",
+                                "mb-2 flex items-center rounded-lg py-2.5 text-sm font-medium transition-colors",
                                 open
                                     ? "gap-3 px-3"
                                     : "justify-center px-0",
@@ -243,16 +253,20 @@ const Sidebar = ({
                             ].join(" ")
                         }
                     >
-                        <Settings size={18} />
+                        <Settings
+                            size={18}
+                            strokeWidth={1.9}
+                            className="shrink-0"
+                        />
+
                         {open && "Settings"}
                     </NavLink>
 
                     {/* User */}
-
                     <button
                         type="button"
                         className={[
-                            "flex w-full items-center rounded-lg transition-colors hover:bg-surface-muted",
+                            "flex w-full items-center rounded-lg transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30",
                             open
                                 ? "gap-3 p-2"
                                 : "justify-center p-1",

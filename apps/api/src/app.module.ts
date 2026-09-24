@@ -7,8 +7,22 @@ import { WorkspaceModule } from "./workspaces/workspace.module.js";
 import { AutomationModule } from "./automations/automation.module.js";
 import { IntegrationModule } from "./integrations/integration.module.js";
 import { SubscriptionsModule } from "./subscriptions/subscriptions.module.js";
+import { ContactsModule } from "./contacts/contacts.module.js";
+import { MessagingModule } from "./messaging/messaging.module.js";
+import { ConversationsModule } from "./conversations/conversations.module.js";
 
 @Module({
-    imports: [DatabaseModule, HealthModule, AuthModule, WorkspaceModule, AutomationModule, IntegrationModule, SubscriptionsModule],
+    imports: [
+        DatabaseModule,
+        HealthModule,
+        AuthModule,
+        WorkspaceModule,
+        AutomationModule,
+        IntegrationModule,
+        SubscriptionsModule,
+        ContactsModule,
+        MessagingModule,
+        ConversationsModule
+    ],
 })
-export class AppModule {}
+export class AppModule { }

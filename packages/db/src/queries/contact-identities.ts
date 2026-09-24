@@ -57,3 +57,24 @@ export async function updateContactIdentity(
 
     return result[0] ?? null;
 }
+
+export async function findContactIdentityByContact(
+    platformAccountId: string,
+    contactId: string,
+) {
+    const result = await db.select()
+        .from(contactIdentities)
+        .where(and(
+            eq(
+                contactIdentities.platformAccountId,
+                platformAccountId,
+            ),
+            eq(
+                contactIdentities.contactId,
+                contactId,
+            ),
+        ))
+        .limit(1);
+
+    return result[0] ?? null;
+}

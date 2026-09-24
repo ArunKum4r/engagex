@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 
 import { db } from "../client.js";
 import { comments } from "../schema/comments.js";
+import { resolveInstagramContact } from "./instagram.js";
 
 export async function processInstagramCommentWebhook(data: {
     workspaceId: string;
@@ -37,6 +38,15 @@ export async function processInstagramCommentWebhook(data: {
         };
     }
 
+    const { contact, identity } = await resolveInstagramContact({
+        workspaceId: data.workspaceId,
+        platformAccountId: data.platformAccountId,
+        externalUserId: data.externalUserId,
+        profile: {
+            username: data.username ?? null,
+        },
+    });
+
     const inserted = await db
         .insert(comments)
         .values({
@@ -54,5 +64,7 @@ export async function processInstagramCommentWebhook(data: {
     return {
         duplicate: false,
         comment: inserted[0],
+        contactId: contact.id,
+        contactIdentityId: identity.id,
     };
 }

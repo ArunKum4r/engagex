@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { IsArray, IsInt, IsNotEmpty, IsNumber, IsObject, IsOptional, IsString, IsUUID, MaxLength, Min, ValidateNested } from "class-validator";
+import { IsArray, IsInt, IsISO8601, IsNotEmpty, IsNumber, IsObject, IsOptional, IsString, IsUUID, MaxLength, Min, ValidateNested } from "class-validator";
 import { Type } from "class-transformer";
 
 export class CreateAutomationDto {
@@ -200,4 +200,27 @@ export class SaveAutomationGraphDto {
     @ValidateNested({ each: true })
     @Type(() => AutomationGraphEdgeDto)
     edges: AutomationGraphEdgeDto[];
+}
+
+export class ContactAutomationPauseDto {
+    @ApiPropertyOptional({
+        description:
+            "Automation ID. Omit to pause all automations for the contact.",
+    })
+    @IsOptional()
+    @IsUUID()
+    automationId?: string;
+
+    @ApiPropertyOptional()
+    @IsOptional()
+    @IsString()
+    reason?: string;
+
+    @ApiPropertyOptional({
+        description:
+            "Optional time when the automation should resume.",
+    })
+    @IsOptional()
+    @IsISO8601()
+    resumeAt?: string;
 }

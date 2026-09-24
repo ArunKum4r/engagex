@@ -10,7 +10,8 @@ import {
     findAutomationWithGraph,
     updateAutomationExecution,
     updateAutomationExecutionStep,
-    findActiveAutomationTriggers
+    findActiveAutomationTriggers,
+    findActiveContactAutomationPauses
 } from "@engagex/db";
 
 import type { AutomationExecutionContext } from "./execution-context.js";
@@ -32,10 +33,10 @@ export class AutomationExecutionService {
         
         const automation = graph.automation;
         console.log("Automation execution context source:", {
-    automationId,
-    workspaceId: automation?.workspaceId,
-    platformAccountId: automation?.platformAccountId,
-});
+            automationId,
+            workspaceId: automation?.workspaceId,
+            platformAccountId: automation?.platformAccountId,
+        });
 
         const trigger = graph.triggers[0] ?? null;
 
@@ -258,10 +259,29 @@ export class AutomationExecutionService {
         dryRun = false,
         eventType?: string
     ) {
-        const activeTriggers =
-            await findActiveAutomationTriggers(
-                platformAccountId,
-            );
+        const activeTriggers = await findActiveAutomationTriggers(platformAccountId);
+
+        const contactId =
+            typeof input.contactId === "string"
+                ? input.contactId
+                : null;
+
+        let pauseAll = false;
+        const pausedAutomationIds = new Set<string>();
+
+        if (contactId) {
+            const pauses = await findActiveContactAutomationPauses(contactId);
+
+            pauseAll = pauses.some((pause) => pause.automationId === null);
+
+            for (const pause of pauses) {
+                if (pause.automationId) {
+                    pausedAutomationIds.add(
+                        pause.automationId,
+                    );
+                }
+            }
+        }
 
         const results: Array<{
             automationId: string;
@@ -276,11 +296,21 @@ export class AutomationExecutionService {
                 continue;
             }
 
-            const matched = this.matchesTrigger(
-                item.trigger.type,
-                item.trigger.config,
-                input,
-            );
+            if (contactId && (pauseAll || pausedAutomationIds.has(item.automation.id))) {
+                console.log(
+                    "Automation paused for contact:",
+                    {
+                        automationId: item.automation.id,
+                        contactId,
+                        pauseAll,
+                    },
+                );
+
+                continue;
+            }
+
+            const matched = this.matchesTrigger(item.trigger.type, item.trigger.config, input);
+
             console.log("Automation trigger check:", {
                 automationId: item.automation.id,
                 triggerType: item.trigger.type,
@@ -296,13 +326,18 @@ export class AutomationExecutionService {
             console.log("Starting automation execution:", {
                 automationId: item.automation.id,
             });
+
             const result = await this.execute(
                 item.automation.id,
                 input,
                 dryRun,
                 platformAccountId
             );
-            console.log("Automation execution finished:", result);
+
+            console.log(
+                "Automation execution finished:",
+                result,
+            );
 
             results.push({
                 automationId: item.automation.id,

@@ -39,3 +39,5 @@ export * from "./queries/contact-identities.js";
 export * from "./queries/conversations.js";
 export * from "./queries/messages.js";
 export * from "./queries/instagram-comments.js";
+export * from "./queries/contact-automation-pauses.js";
+export * from "./queries/conversation-reminders.js";
