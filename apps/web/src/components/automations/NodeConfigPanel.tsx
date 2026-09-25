@@ -1,5 +1,10 @@
-import { X } from "lucide-react";
+import { useEffect, useState } from "react";
 import type { Node } from "@xyflow/react";
+import { X } from "lucide-react";
+import {
+    getInstagramMedia,
+    type InstagramMedia,
+} from "../../api/integrations";
 import {
     getPlatformCapabilities,
     getStepCapability,
@@ -7,6 +12,8 @@ import {
 
 interface NodeConfigPanelProps {
     node: Node;
+    workspaceId: string;
+    platformAccountId: string | null;
     onClose: () => void;
     onChange: (
         nodeId: string,
@@ -23,6 +30,8 @@ const NodeConfigPanel = ({
     node,
     onClose,
     onChange,
+    workspaceId,
+    platformAccountId,
 }: NodeConfigPanelProps) => {
     const isTrigger = node.type === "trigger";
 
@@ -61,6 +70,19 @@ const NodeConfigPanel = ({
                 capability.type === triggerType,
         );
 
+    const fallbackTriggerConfigType =
+        triggerType === "INSTAGRAM_COMMENT"
+            ? "COMMENT"
+            : triggerType === "INSTAGRAM_DM"
+                ? "MESSAGE_KEYWORDS"
+                : triggerType === "INSTAGRAM_STORY_REPLY"
+                    ? "STORY_REPLY"
+                    : undefined;
+
+    const triggerConfigType =
+        triggerCapability?.configType ??
+        fallbackTriggerConfigType;
+
     const capability = isTrigger
         ? triggerCapability
         : stepCapability;
@@ -78,8 +100,68 @@ const NodeConfigPanel = ({
         });
     };
 
+    const [instagramMedia, setInstagramMedia] = useState<InstagramMedia[]>([]);
+    const [loadingInstagramMedia, setLoadingInstagramMedia] = useState(false);
+    const [instagramMediaError, setInstagramMediaError] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (
+            !isTrigger ||
+            triggerType !== "INSTAGRAM_COMMENT" ||
+            !workspaceId ||
+            !platformAccountId
+        ) {
+            setInstagramMedia([]);
+            return;
+        }
+
+        let cancelled = false;
+
+        const loadInstagramMedia = async () => {
+            try {
+                setLoadingInstagramMedia(true);
+                setInstagramMediaError(null);
+
+                const media = await getInstagramMedia(
+                    workspaceId,
+                    platformAccountId,
+                );
+
+                if (!cancelled) {
+                    setInstagramMedia(media);
+                }
+            } catch (error) {
+                console.error(
+                    "Failed to load Instagram media",
+                    error,
+                );
+
+                if (!cancelled) {
+                    setInstagramMediaError(
+                        "Failed to load Instagram posts and reels.",
+                    );
+                }
+            } finally {
+                if (!cancelled) {
+                    setLoadingInstagramMedia(false);
+                }
+            }
+        };
+
+        void loadInstagramMedia();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [
+        isTrigger,
+        triggerType,
+        workspaceId,
+        platformAccountId,
+    ]);
+
     const renderTriggerContent = () => {
-        if (!triggerCapability?.configType) {
+        if (!triggerConfigType) {
             return (
                 <div className="rounded-xl border border-border bg-surface-muted p-4">
                     <p className="text-sm text-text-secondary">
@@ -90,20 +172,189 @@ const NodeConfigPanel = ({
             );
         }
 
-        switch (triggerCapability.configType) {
-            case "CONTENT_TARGET": {
+        console.log("Node capability debug:", {
+            nodeData: node.data,
+            platform,
+            triggerType,
+            platformCapabilities,
+            triggerCapability,
+            triggerConfigType,
+        });
+
+        switch (triggerConfigType) {
+            case "MESSAGE_KEYWORDS": {
+                const keywords = Array.isArray(config.keywords)
+                    ? config.keywords.filter(
+                        (keyword): keyword is string =>
+                            typeof keyword === "string",
+                    )
+                    : [];
+
+                const displayKeywords = keywords.length > 0 ? keywords : [""];
+
+                const match =
+                    config.match === "ALL"
+                        ? "ALL"
+                        : "ANY";
+
+                const updateKeywords = (
+                    nextKeywords: string[],
+                ) => {
+                    onChange(node.id, {
+                        ...node.data,
+                        config: {
+                            ...config,
+                            keywords: nextKeywords,
+                        },
+                    });
+                };
+
+                return (
+                    <div className="space-y-4">
+                        <div>
+                            <label className="mb-2 block text-sm font-medium text-text">
+                                Keywords
+                            </label>
+
+                            <div className="space-y-2">
+                                {displayKeywords.map(
+                                    (keyword, index) => (
+                                        <div
+                                            key={index}
+                                            className="flex gap-2"
+                                        >
+                                            <input
+                                                type="text"
+                                                value={keyword}
+                                                onChange={(event) => {
+                                                    const nextKeywords = [
+                                                        ...keywords,
+                                                    ];
+
+                                                    nextKeywords[index] =
+                                                        event.target.value;
+
+                                                    updateKeywords(
+                                                        nextKeywords,
+                                                    );
+                                                }}
+                                                placeholder="e.g. GUIDE"
+                                                className={inputClassName}
+                                            />
+
+                                            {keywords.length > 1 && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        updateKeywords(
+                                                            keywords.filter(
+                                                                (_, keywordIndex) =>
+                                                                    keywordIndex !==
+                                                                    index,
+                                                            ),
+                                                        )
+                                                    }
+                                                    className="rounded-lg border border-border px-3 text-sm text-text-secondary hover:border-danger/30 hover:bg-danger/5 hover:text-danger"
+                                                >
+                                                    Remove
+                                                </button>
+                                            )}
+                                        </div>
+                                    ),
+                                )}
+                            </div>
+
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    updateKeywords([
+                                        ...keywords,
+                                        "",
+                                    ])
+                                }
+                                className="mt-2 text-sm font-medium text-primary hover:text-primary/80"
+                            >
+                                + Add keyword
+                            </button>
+
+                            <p className="mt-1.5 text-xs text-text-secondary">
+                                Start this automation only when the
+                                message matches the configured keywords.
+                            </p>
+                        </div>
+
+                        <div>
+                            <label className="mb-2 block text-sm font-medium text-text">
+                                Match
+                            </label>
+
+                            <select
+                                value={match}
+                                onChange={(event) =>
+                                    updateConfig(
+                                        "match",
+                                        event.target.value,
+                                    )
+                                }
+                                className={selectClassName}
+                            >
+                                <option value="ANY">
+                                    Any keyword
+                                </option>
+
+                                <option value="ALL">
+                                    All keywords
+                                </option>
+                            </select>
+                        </div>
+                    </div>
+                );
+            }
+            case "COMMENT": {
                 const target =
                     config.target === "SPECIFIC"
                         ? "SPECIFIC"
                         : "ALL";
 
-                const contentId =
+                const keywords = Array.isArray(config.keywords)
+                    ? config.keywords.filter(
+                        (keyword): keyword is string =>
+                            typeof keyword === "string",
+                    )
+                    : [];
+
+                const displayKeywords =
+                    keywords.length > 0 ? keywords : [""];
+
+                const match =
+                    config.match === "ALL"
+                        ? "ALL"
+                        : "ANY";
+
+                const selectedMediaId =
                     typeof config.contentId === "string"
                         ? config.contentId
                         : "";
 
+                const selectedMedia =
+                    instagramMedia.find(
+                        (media) => media.id === selectedMediaId,
+                    ) ?? null;
+
+                const updateKeywords = (
+                    nextKeywords: string[],
+                ) => {
+                    onChange(node.id, {
+                        ...node.data,
+                        config: {
+                            ...config,
+                            keywords: nextKeywords,
+                        },
+                    });
+                };
+
                 return (
-                    <div className="space-y-4">
+                    <div className="space-y-5">
                         <div>
                             <label className="mb-2 block text-sm font-medium text-text">
                                 Content target
@@ -115,18 +366,11 @@ const NodeConfigPanel = ({
                                     const nextTarget =
                                         event.target.value;
 
-                                    if (
-                                        nextTarget ===
-                                        "SPECIFIC"
-                                    ) {
-                                        onChange(node.id, {
-                                            ...node.data,
-                                            config: {
-                                                ...config,
-                                                target: "SPECIFIC",
-                                            },
-                                        });
-
+                                    if (nextTarget === "SPECIFIC") {
+                                        updateConfig(
+                                            "target",
+                                            "SPECIFIC",
+                                        );
                                         return;
                                     }
 
@@ -136,6 +380,9 @@ const NodeConfigPanel = ({
                                             ...config,
                                             target: "ALL",
                                             contentId: undefined,
+                                            contentType: undefined,
+                                            contentTitle: undefined,
+                                            contentThumbnail: undefined,
                                         },
                                     });
                                 }}
@@ -144,47 +391,249 @@ const NodeConfigPanel = ({
                                 <option value="ALL">
                                     All posts and reels
                                 </option>
-
                                 <option value="SPECIFIC">
                                     Specific post or reel
                                 </option>
                             </select>
 
                             <p className="mt-1.5 text-xs text-text-secondary">
-                                Choose which Instagram content
-                                should activate this trigger.
+                                Choose which Instagram content should
+                                activate this trigger.
                             </p>
                         </div>
 
                         {target === "SPECIFIC" && (
                             <div>
                                 <label className="mb-2 block text-sm font-medium text-text">
-                                    Post or reel ID
+                                    Post or reel
                                 </label>
 
-                                <input
-                                    type="text"
-                                    value={contentId}
-                                    onChange={(event) =>
-                                        updateConfig(
-                                            "contentId",
-                                            event.target.value,
-                                        )
-                                    }
-                                    placeholder="Enter Instagram post or reel ID"
-                                    className={inputClassName}
-                                />
+                                <select
+                                    value={selectedMediaId}
+                                    onChange={(event) => {
+                                        const mediaId =
+                                            event.target.value;
 
-                                <p className="mt-1.5 text-xs text-text-secondary">
-                                    Enter the Instagram content ID
-                                    that should activate this
-                                    automation.
-                                </p>
+                                        const media =
+                                            instagramMedia.find(
+                                                (item) =>
+                                                    item.id === mediaId,
+                                            );
+
+                                        if (!media) {
+                                            onChange(node.id, {
+                                                ...node.data,
+                                                config: {
+                                                    ...config,
+                                                    contentId: undefined,
+                                                    contentType: undefined,
+                                                    contentTitle: undefined,
+                                                    contentThumbnail: undefined,
+                                                },
+                                            });
+
+                                            return;
+                                        }
+
+                                        onChange(node.id, {
+                                            ...node.data,
+                                            config: {
+                                                ...config,
+                                                target: "SPECIFIC",
+                                                contentId: media.id,
+                                                contentType: media.type,
+                                                contentTitle: media.title,
+                                                contentThumbnail:
+                                                    media.thumbnail,
+                                            },
+                                        });
+                                    }}
+                                    className={selectClassName}
+                                    disabled={
+                                        loadingInstagramMedia ||
+                                        !platformAccountId
+                                    }
+                                >
+                                    <option value="">
+                                        {loadingInstagramMedia
+                                            ? "Loading posts and reels..."
+                                            : "Select a post or reel"}
+                                    </option>
+
+                                    {instagramMedia.map((media) => (
+                                        <option
+                                            key={media.id}
+                                            value={media.id}
+                                        >
+                                            {media.type === "REEL"
+                                                ? "Reel"
+                                                : "Post"}{" "}
+                                            —{" "}
+                                            {media.title ||
+                                                "Untitled content"}
+                                        </option>
+                                    ))}
+                                </select>
+
+                                {selectedMedia && (
+                                    <div className="mt-3 rounded-lg border border-border bg-surface-muted p-3">
+                                        <p className="text-sm font-medium text-text">
+                                            {selectedMedia.type === "REEL"
+                                                ? "Reel"
+                                                : "Post"}
+                                        </p>
+
+                                        {selectedMedia.title && (
+                                            <p className="mt-1 text-xs text-text-secondary">
+                                                {selectedMedia.title}
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
+
+                                {instagramMediaError && (
+                                    <p className="mt-1.5 text-xs text-danger">
+                                        {instagramMediaError}
+                                    </p>
+                                )}
+
+                                {!loadingInstagramMedia &&
+                                    !instagramMediaError &&
+                                    instagramMedia.length === 0 && (
+                                    <p className="mt-1.5 text-xs text-text-secondary">
+                                        No Instagram posts or reels were
+                                        found.
+                                    </p>
+                                    )}
                             </div>
                         )}
+
+                        <div>
+                            <label className="mb-2 block text-sm font-medium text-text">
+                                Keywords
+                            </label>
+
+                            <div className="space-y-2">
+                                {displayKeywords.map(
+                                    (keyword, index) => (
+                                        <div
+                                            key={index}
+                                            className="flex gap-2"
+                                        >
+                                            <input
+                                                type="text"
+                                                value={keyword}
+                                                onChange={(event) => {
+                                                    const nextKeywords =
+                                                        [...keywords];
+
+                                                    nextKeywords[index] =
+                                                        event.target.value;
+
+                                                    updateKeywords(
+                                                        nextKeywords,
+                                                    );
+                                                }}
+                                                placeholder="e.g. price"
+                                                className={`min-w-0 flex-1 ${inputClassName}`}
+                                            />
+
+                                            {keywords.length > 1 && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        updateKeywords(
+                                                            keywords.filter(
+                                                                (
+                                                                    _,
+                                                                    keywordIndex,
+                                                                ) =>
+                                                                    keywordIndex !==
+                                                                    index,
+                                                            ),
+                                                        )
+                                                    }
+                                                    className="rounded-lg border border-border px-3 text-sm text-text-secondary hover:border-danger/30 hover:bg-danger/5 hover:text-danger"
+                                                >
+                                                    Remove
+                                                </button>
+                                            )}
+                                        </div>
+                                    ),
+                                )}
+                            </div>
+
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    updateKeywords([
+                                        ...keywords,
+                                        "",
+                                    ])
+                                }
+                                className="mt-2 text-sm font-medium text-primary hover:text-primary/80"
+                            >
+                                + Add keyword
+                            </button>
+
+                            <p className="mt-1.5 text-xs text-text-secondary">
+                                Start this automation when a comment
+                                matches the configured keywords.
+                            </p>
+                        </div>
+
+                        <div>
+                            <label className="mb-2 block text-sm font-medium text-text">
+                                Match
+                            </label>
+
+                            <select
+                                value={match}
+                                onChange={(event) =>
+                                    updateConfig(
+                                        "match",
+                                        event.target.value,
+                                    )
+                                }
+                                className={selectClassName}
+                            >
+                                <option value="ANY">
+                                    Any keyword
+                                </option>
+
+                                <option value="ALL">
+                                    All keywords
+                                </option>
+                            </select>
+                        </div>
                     </div>
                 );
             }
+            case "STORY_REPLY":
+                return (
+                    <div className="space-y-4">
+                        <div>
+                            <label className="mb-2 block text-sm font-medium text-text">
+                                Story
+                            </label>
+
+                            <select
+                                value="ALL"
+                                disabled
+                                className={selectClassName}
+                            >
+                                <option value="ALL">
+                                    Any story
+                                </option>
+                            </select>
+
+                            <p className="mt-1.5 text-xs text-text-secondary">
+                                Start this automation when someone replies to any
+                                Instagram story.
+                            </p>
+                        </div>
+                    </div>
+                );
 
             default:
                 return (
@@ -334,6 +783,7 @@ const NodeConfigPanel = ({
         label: string;
         description: string;
     }) => {
+        console.log(label)
         const operator =
             typeof config.operator === "string"
                 ? config.operator
@@ -348,7 +798,6 @@ const NodeConfigPanel = ({
             typeof config.unit === "string"
                 ? config.unit
                 : "DAYS";
-        console.log(label)
         return (
             <div className="space-y-4">
                 <div>
@@ -1032,7 +1481,14 @@ const NodeConfigPanel = ({
     };
 
     return (
-        <aside className="absolute inset-x-2 bottom-2 top-2 z-20 flex flex-col rounded-2xl border border-border bg-surface shadow-2xl sm:inset-y-0 sm:left-auto sm:right-0 sm:w-[340px] sm:rounded-none sm:rounded-l-2xl sm:border-y-0 sm:border-r-0 sm:border-l">
+        <>
+            <div
+                className="fixed inset-0 z-[90] bg-black/50 sm:hidden"
+                onClick={onClose}
+                aria-hidden="true"
+            />
+
+            <aside className="fixed inset-x-0 bottom-0 z-[100] flex max-h-[88dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-border bg-surface shadow-2xl sm:absolute sm:inset-y-0 sm:bottom-auto sm:left-auto sm:right-0 sm:max-h-none sm:w-[340px] sm:rounded-none sm:rounded-l-2xl sm:border-y-0 sm:border-r-0 sm:border-l">
             <div className="flex items-center justify-between border-b border-border bg-surface/95 px-4 py-4 backdrop-blur">
                 <div>
                     <p className="text-xs font-medium uppercase tracking-wide text-primary">
@@ -1063,10 +1519,11 @@ const NodeConfigPanel = ({
                 </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 sm:p-5">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 [touch-action:pan-y] sm:p-5">
                 {renderContent()}
             </div>
         </aside>
+        </>
     );
 };
 

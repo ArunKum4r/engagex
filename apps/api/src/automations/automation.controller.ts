@@ -141,8 +141,11 @@ export class AutomationController {
                 summary: "Example update",
                 value: {
                     name: "Updated Price Inquiry",
-                    description:
-                        "Updated automation description",
+                    description: "Updated automation description",
+                    priority: 10,
+                    executionPolicy: "EXCLUSIVE",
+                    triggerRunPolicy: "ONCE_PER_CONVERSATION",
+                    cooldownSeconds: null,
                 },
             },
         },

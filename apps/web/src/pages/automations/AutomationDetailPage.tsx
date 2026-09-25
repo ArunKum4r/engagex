@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
     ArrowLeft,
     Eye,
@@ -23,6 +23,9 @@ import {
     deleteAutomation,
     getAutomation,
     pauseAutomation,
+    updateAutomation,
+    type AutomationExecutionPolicy,
+    type AutomationTriggerRunPolicy,
 } from "../../api/automation";
 import { queryKeys } from "../../lib/query-keys";
 import { useWorkspaceStore } from "../../stores/workspace.store";
@@ -46,8 +49,11 @@ const AutomationDetailsPage = () => {
     const workspaceId =
         currentWorkspace?.workspace.id;
 
-    const [actionError, setActionError] =
-        useState<string | null>(null);
+    const [actionError, setActionError] = useState<string | null>(null);
+    const [priority, setPriority] = useState(0);
+    const [executionPolicy, setExecutionPolicy] = useState<AutomationExecutionPolicy>("EXCLUSIVE");
+    const [triggerRunPolicy, setTriggerRunPolicy] = useState<AutomationTriggerRunPolicy>("EVERY_EVENT");
+    const [cooldownSeconds, setCooldownSeconds] = useState<number | null>(null);
 
     const {
         data: automation,
@@ -75,6 +81,17 @@ const AutomationDetailsPage = () => {
             Boolean(workspaceId) &&
             Boolean(automationId),
     });
+
+    useEffect(() => {
+        if (!automation) {
+            return;
+        }
+
+        setPriority(automation.priority);
+        setExecutionPolicy(automation.executionPolicy);
+        setTriggerRunPolicy(automation.triggerRunPolicy);
+        setCooldownSeconds(automation.cooldownSeconds);
+    }, [automation]);
 
     const activateMutation =
         useMutation({
@@ -186,6 +203,49 @@ const AutomationDetailsPage = () => {
                 );
             },
         });
+
+    const settingsMutation = useMutation({
+        mutationFn: () =>
+            updateAutomation({
+                workspaceId: workspaceId as string,
+                automationId: automationId as string,
+                payload: {
+                    priority,
+                    executionPolicy,
+                    triggerRunPolicy,
+                    cooldownSeconds:
+                        triggerRunPolicy === "COOLDOWN"
+                            ? cooldownSeconds
+                            : null,
+                },
+            }),
+        onMutate: () => {
+            setActionError(null);
+        },
+        onSuccess: () => {
+            if (workspaceId && automationId) {
+                void queryClient.invalidateQueries({
+                    queryKey: queryKeys.automations.detail(
+                        workspaceId,
+                        automationId,
+                    ),
+                });
+
+                void queryClient.invalidateQueries({
+                    queryKey: queryKeys.automations.all(
+                        workspaceId,
+                    ),
+                });
+            }
+        },
+        onError: (error) => {
+            setActionError(
+                error instanceof Error
+                    ? error.message
+                    : "Unable to save automation settings.",
+            );
+        },
+    });
 
     const handleActivate =
         () => {
@@ -453,9 +513,7 @@ const AutomationDetailsPage = () => {
                     <div className="grid gap-5 p-4 sm:p-5">
                         <DetailItem
                             label="Status"
-                            value={
-                                automation.status
-                            }
+                            value={automation.status}
                         />
 
                         <DetailItem
@@ -466,19 +524,156 @@ const AutomationDetailsPage = () => {
                             }
                         />
 
-                        <DetailItem
-                            label="Created"
-                            value={new Date(
-                                automation.createdAt,
-                            ).toLocaleDateString()}
-                        />
+                        <div>
+                            <label
+                                htmlFor="automation-priority"
+                                className="text-xs font-medium text-text-muted"
+                            >
+                                Priority
+                            </label>
 
-                        <DetailItem
-                            label="Last updated"
-                            value={new Date(
-                                automation.updatedAt,
-                            ).toLocaleDateString()}
-                        />
+                            <input
+                                id="automation-priority"
+                                type="number"
+                                min={0}
+                                value={priority}
+                                onChange={(event) =>
+                                    setPriority(
+                                        Number(event.target.value),
+                                    )
+                                }
+                                className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-text outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
+                            />
+
+                            <p className="mt-1 text-xs text-text-muted">
+                                Higher priority automations are considered first.
+                            </p>
+                        </div>
+
+                        <div>
+                            <label
+                                htmlFor="automation-execution-policy"
+                                className="text-xs font-medium text-text-muted"
+                            >
+                                Execution policy
+                            </label>
+
+                            <select
+                                id="automation-execution-policy"
+                                value={executionPolicy}
+                                onChange={(event) =>
+                                    setExecutionPolicy(
+                                        event.target.value as AutomationExecutionPolicy,
+                                    )
+                                }
+                                className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-text outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
+                            >
+                                <option value="EXCLUSIVE">
+                                    Exclusive
+                                </option>
+                                <option value="ALLOW_MULTIPLE">
+                                    Allow multiple
+                                </option>
+                            </select>
+
+                            <p className="mt-1 text-xs text-text-muted">
+                                Controls whether this automation can run alongside competing automations.
+                            </p>
+                        </div>
+
+                        <div>
+                            <label
+                                htmlFor="automation-trigger-run-policy"
+                                className="text-xs font-medium text-text-muted"
+                            >
+                                Trigger run policy
+                            </label>
+
+                            <select
+                                id="automation-trigger-run-policy"
+                                value={triggerRunPolicy}
+                                onChange={(event) =>
+                                    setTriggerRunPolicy(
+                                        event.target.value as AutomationTriggerRunPolicy,
+                                    )
+                                }
+                                className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-text outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
+                            >
+                                <option value="EVERY_EVENT">
+                                    Every event
+                                </option>
+                                <option value="ONCE_PER_CONTACT">
+                                    Once per contact
+                                </option>
+                                <option value="ONCE_PER_CONVERSATION">
+                                    Once per conversation
+                                </option>
+                                <option value="COOLDOWN">
+                                    Cooldown
+                                </option>
+                            </select>
+                        </div>
+
+                        {triggerRunPolicy === "COOLDOWN" && (
+                            <div>
+                                <label
+                                    htmlFor="automation-cooldown"
+                                    className="text-xs font-medium text-text-muted"
+                                >
+                                    Cooldown seconds
+                                </label>
+
+                                <input
+                                    id="automation-cooldown"
+                                    type="number"
+                                    min={1}
+                                    value={cooldownSeconds ?? ""}
+                                    onChange={(event) => {
+                                        const value = event.target.value;
+
+                                        setCooldownSeconds(
+                                            value === ""
+                                                ? null
+                                                : Number(value),
+                                        );
+                                    }}
+                                    placeholder="3600"
+                                    className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-text outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
+                                />
+
+                                <p className="mt-1 text-xs text-text-muted">
+                                    Minimum time between runs for the same contact.
+                                </p>
+                            </div>
+                        )}
+
+                        <Button
+                            className="w-full"
+                            onClick={() =>
+                                settingsMutation.mutate()
+                            }
+                            loading={settingsMutation.isPending}
+                        >
+                            Save settings
+                        </Button>
+
+                        <div className="border-t border-border pt-5">
+                            <DetailItem
+                                label="Created"
+                                value={new Date(
+                                    automation.createdAt,
+                                ).toLocaleDateString()}
+                            />
+
+                            <div className="mt-5">
+                                <DetailItem
+                                    label="Last updated"
+                                    value={new Date(
+                                        automation.updatedAt,
+                                    ).toLocaleDateString()}
+                                />
+                            </div>
+                        </div>
                     </div>
                 </aside>
             </div>

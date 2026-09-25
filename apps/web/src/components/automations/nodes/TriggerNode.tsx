@@ -16,6 +16,48 @@ interface TriggerNodeData {
     isPlaceholder?: boolean;
 }
 
+const getTriggerSummary = (
+    triggerType: string | null | undefined,
+    config: Record<string, unknown>,
+) => {
+    if (triggerType === "INSTAGRAM_COMMENT") {
+        const target = config.target === "SPECIFIC"
+            ? "Specific post or reel"
+            : "All posts and reels";
+        const keywords = Array.isArray(config.keywords)
+            ? config.keywords.filter(
+                (keyword): keyword is string =>
+                    typeof keyword === "string" && keyword.trim().length > 0,
+            )
+            : [];
+
+        const keywordSummary = keywords.length > 0
+            ? `Keywords: ${keywords.join(", ")}`
+            : "Any comment";
+
+        return `${target} · ${keywordSummary}`;
+    }
+
+    if (triggerType === "INSTAGRAM_DM") {
+        const keywords = Array.isArray(config.keywords)
+            ? config.keywords.filter(
+                (keyword): keyword is string =>
+                    typeof keyword === "string" && keyword.trim().length > 0,
+            )
+            : [];
+
+        return keywords.length > 0
+            ? `Keywords: ${keywords.join(", ")}`
+            : "Any direct message";
+    }
+
+    if (triggerType === "INSTAGRAM_STORY_REPLY") {
+        return "Any Instagram story reply";
+    }
+
+    return "Trigger configuration";
+};
+
 const TriggerNode = ({
     data,
     selected,
@@ -28,6 +70,22 @@ const TriggerNode = ({
 
     const title =
         nodeData.label ?? "Choose a trigger";
+    const selectedContentTitle =
+        typeof nodeData.config?.contentTitle === "string"
+            ? nodeData.config.contentTitle
+            : "";
+
+    const selectedContentThumbnail =
+        typeof nodeData.config?.contentThumbnail === "string"
+            ? nodeData.config.contentThumbnail
+            : "";
+
+    const isSpecificComment =
+        nodeData.triggerType === "INSTAGRAM_COMMENT" &&
+        nodeData.config?.target === "SPECIFIC" &&
+        typeof nodeData.config?.contentId === "string" &&
+        nodeData.config.contentId.length > 0;
+
 
     return (
         <div
@@ -101,8 +159,35 @@ const TriggerNode = ({
                         </p>
 
                         <p className="mt-1.5 text-sm leading-6 text-text-secondary">
-                            This event starts the automation workflow.
+                            {getTriggerSummary(
+                                nodeData.triggerType,
+                                nodeData.config ?? {},
+                            )}
                         </p>
+
+                        {isSpecificComment && (
+                            <div className="mt-3 flex items-center gap-2.5 rounded-xl border border-border bg-surface-muted/60 p-2">
+                                {selectedContentThumbnail ? (
+                                    <img
+                                        src={selectedContentThumbnail}
+                                        alt=""
+                                        className="h-10 w-10 shrink-0 rounded-lg object-cover"
+                                    />
+                                ) : (
+                                    <div className="h-10 w-10 shrink-0 rounded-lg bg-surface" />
+                                )}
+
+                                <div className="min-w-0">
+                                    <p className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                                        Selected content
+                                    </p>
+
+                                    <p className="mt-0.5 truncate text-xs font-medium text-text">
+                                        {selectedContentTitle || "Selected post or reel"}
+                                    </p>
+                                </div>
+                            </div>
+                        )}
                     </>
                 )}
             </div>

@@ -1,5 +1,15 @@
 import apiClient from "./client";
 
+export type AutomationExecutionPolicy =
+    | "EXCLUSIVE"
+    | "ALLOW_MULTIPLE";
+
+export type AutomationTriggerRunPolicy =
+    | "EVERY_EVENT"
+    | "ONCE_PER_CONTACT"
+    | "ONCE_PER_CONVERSATION"
+    | "COOLDOWN";
+
 export interface Automation {
     id: string;
     name: string;
@@ -8,6 +18,12 @@ export interface Automation {
     platformAccountId: string | null;
     workspaceId: string;
     createdByUserId: string;
+
+    priority: number;
+    executionPolicy: AutomationExecutionPolicy;
+    triggerRunPolicy: AutomationTriggerRunPolicy;
+    cooldownSeconds: number | null;
+
     createdAt: string;
     updatedAt: string;
 }
@@ -93,6 +109,11 @@ export interface UpdateAutomationPayload {
     name?: string;
     description?: string;
     platformAccountId?: string;
+
+    priority?: number;
+    executionPolicy?: AutomationExecutionPolicy;
+    triggerRunPolicy?: AutomationTriggerRunPolicy;
+    cooldownSeconds?: number | null;
 }
 
 export const getAutomation = async ({

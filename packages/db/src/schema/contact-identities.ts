@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp, index, unique, foreignKey } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, timestamp, index, unique, foreignKey, jsonb } from "drizzle-orm/pg-core";
 
 import { contacts } from "./contacts.js";
 
@@ -12,6 +12,7 @@ export const contactIdentities = pgTable("contact_identities", {
     externalId: varchar("external_id", { length: 255 }).notNull(),
     username: varchar("username", { length: 255 }),
     displayName: varchar("display_name", { length: 255 }),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

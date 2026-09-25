@@ -31,7 +31,7 @@ export const instagramCapabilities: AutomationPlatformCapabilities = {
             description: "When someone comments on your post or reel",
             category: "TRIGGER",
             icon: MessageCircle,
-            configType: "CONTENT_TARGET",
+            configType: "COMMENT",
         },
         {
             type: "INSTAGRAM_STORY_REPLY",
@@ -39,6 +39,7 @@ export const instagramCapabilities: AutomationPlatformCapabilities = {
             description: "When someone replies to your Instagram story",
             category: "TRIGGER",
             icon: Reply,
+            configType: "STORY_REPLY",
         },
         {
             type: "INSTAGRAM_DM",
@@ -46,6 +47,7 @@ export const instagramCapabilities: AutomationPlatformCapabilities = {
             description: "When someone sends you a direct message",
             category: "TRIGGER",
             icon: Send,
+            configType: "MESSAGE_KEYWORDS",
         },
         {
             type: "INSTAGRAM_STORY_SHARE",

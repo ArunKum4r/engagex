@@ -1,7 +1,8 @@
 import { BadRequestException, ForbiddenException, Injectable, UnauthorizedException } from "@nestjs/common";
 import { createOauthState, ENTITLEMENTS, findValidOauthState, markOauthStateUsed,
     findPlatformAccountByExternalId, createPlatformAccount, findPlatformAccountById,
-    findWorkspacePlatformAccount, deletePlatformAccountWithData } from "@engagex/db";
+    findWorkspacePlatformAccount, deletePlatformAccountWithData, findPlatformAccountsByExternalId, processInstagramMessageWebhook,
+    processInstagramCommentWebhook, processInstagramOutboundWebhook } from "@engagex/db";
 import { randomBytes, createHash } from "node:crypto";
 import { SubscriptionsService } from "../../subscriptions/subscriptions.service.js";
 import { InstagramApiClient } from "./api/instagram-api.client.js";
@@ -520,5 +521,214 @@ export class InstagramService {
             success: true,
             platformAccountId: deleted.id,
         };
+    }
+
+    async processWebhookMessage(data: {
+        recipientId: string;
+        senderId: string;
+        messageId: string;
+        text?: string | null;
+        timestamp: number;
+        payload: Record<string, unknown>;
+        isEcho?: boolean;
+    }) {
+        if (data.isEcho) {
+            return processInstagramOutboundWebhook({
+                senderId: data.senderId,
+                recipientId: data.recipientId,
+                messageId: data.messageId,
+                text: data.text ?? null,
+                timestamp: data.timestamp,
+                payload: data.payload,
+            });
+        }
+        const accounts = await findPlatformAccountsByExternalId(
+            "INSTAGRAM",
+            data.recipientId,
+        );
+
+        if (accounts.length === 0) {
+            throw new BadRequestException(
+                `Instagram account not found: ${data.recipientId}`,
+            );
+        }
+
+        if (accounts.length > 1) {
+            throw new BadRequestException(
+                `Multiple Instagram accounts found: ${data.recipientId}`,
+            );
+        }
+
+        const account = accounts[0];
+
+        const profile = await this.getUserProfile(
+            account.workspaceId,
+            account.id,
+            data.senderId,
+        );
+
+        const contactProfile = {
+            name: profile.name ?? null,
+            username: profile.username ?? null,
+            profilePic: profile.profile_pic ?? null,
+            isVerifiedUser: profile.is_verified_user ?? false,
+            followerCount: profile.follower_count ?? null,
+            isUserFollowBusiness:
+                profile.is_user_follow_business ?? null,
+            isBusinessFollowUser:
+                profile.is_business_follow_user ?? null,
+        };
+
+        const result = await processInstagramMessageWebhook({
+            recipientId: data.recipientId,
+            senderId: data.senderId,
+            messageId: data.messageId,
+            text: data.text ?? null,
+            timestamp: data.timestamp,
+            payload: data.payload,
+            profile: contactProfile,
+        });
+
+        return {
+            ...result,
+            platformAccountId: account.id,
+        };
+    }
+
+    async getUserProfile(
+        workspaceId: string,
+        platformAccountId: string,
+        instagramScopedUserId: string,
+    ) {
+        const account = await findWorkspacePlatformAccount(
+            workspaceId,
+            platformAccountId,
+        );
+
+        if (!account) {
+            throw new BadRequestException(
+                "Instagram account not found",
+            );
+        }
+
+        if (account.platform !== "INSTAGRAM") {
+            throw new BadRequestException(
+                "Platform account is not an Instagram account",
+            );
+        }
+
+        const credentials =
+            account.credentials &&
+            typeof account.credentials === "object" &&
+            !Array.isArray(account.credentials)
+                ? account.credentials as Record<string, unknown>
+                : {};
+
+        const accessToken =
+            typeof credentials.accessToken === "string"
+                ? credentials.accessToken
+                : null;
+
+        if (!accessToken) {
+            throw new BadRequestException(
+                "Instagram access token is missing",
+            );
+        }
+
+        return this.instagramApiClient.getUserProfile(
+            accessToken,
+            instagramScopedUserId,
+        );
+    }
+
+    async processWebhookComment(data: {
+        recipientId: string;
+        commentId: string;
+        senderId: string;
+        username?: string | null;
+        text?: string | null;
+        mediaId?: string | null;
+        mediaType?: string | null;
+    }) {
+        const accounts = await findPlatformAccountsByExternalId(
+            "INSTAGRAM",
+            data.recipientId,
+        );
+
+        if (accounts.length === 0) {
+            throw new BadRequestException(
+                `Instagram account not found: ${data.recipientId}`,
+            );
+        }
+
+        if (accounts.length > 1) {
+            throw new BadRequestException(
+                `Multiple Instagram accounts found: ${data.recipientId}`,
+            );
+        }
+
+        const account = accounts[0];
+
+        return processInstagramCommentWebhook({
+            workspaceId: account.workspaceId,
+            platformAccountId: account.id,
+            externalCommentId: data.commentId,
+            externalUserId: data.senderId,
+            username: data.username ?? null,
+            text: data.text ?? null,
+            mediaId: data.mediaId ?? null,
+            mediaType: data.mediaType ?? null,
+        });
+    }
+
+    async getMedia(
+        workspaceId: string,
+        platformAccountId: string,
+    ) {
+        const account = await findWorkspacePlatformAccount(
+            workspaceId,
+            platformAccountId,
+        );
+
+        if (!account) {
+            throw new BadRequestException(
+                "Instagram account not found",
+            );
+        }
+
+        if (account.platform !== "INSTAGRAM") {
+            throw new BadRequestException(
+                "Platform account is not an Instagram account",
+            );
+        }
+
+        const credentials =
+            account.credentials &&
+            typeof account.credentials === "object" &&
+            !Array.isArray(account.credentials)
+                ? account.credentials as Record<string, unknown>
+                : {};
+
+        const accessToken =
+            typeof credentials.accessToken === "string"
+                ? credentials.accessToken
+                : null;
+
+        if (!accessToken) {
+            throw new BadRequestException(
+                "Instagram access token is missing",
+            );
+        }
+
+        if (!account.externalAccountId) {
+            throw new BadRequestException(
+                "Instagram account ID is missing",
+            );
+        }
+
+        return this.instagramApiClient.getMedia(
+            accessToken,
+            account.externalAccountId,
+        );
     }
 }

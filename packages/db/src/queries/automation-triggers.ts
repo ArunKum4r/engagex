@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 
 import { db } from "../client.js";
 import { automationTriggers } from "../schema/automation-triggers.js";
+import { automations } from "../schema/automations.js";
 
 export async function createAutomationTrigger(data: {
     automationId: string;
@@ -31,14 +32,8 @@ export async function findAutomationTrigger(
         .from(automationTriggers)
         .where(
             and(
-                eq(
-                    automationTriggers.id,
-                    triggerId,
-                ),
-                eq(
-                    automationTriggers.automationId,
-                    automationId,
-                ),
+                eq(automationTriggers.id, triggerId),
+                eq(automationTriggers.automationId, automationId),
             ),
         )
         .limit(1);
@@ -80,17 +75,38 @@ export async function deleteAutomationTrigger(
         .delete(automationTriggers)
         .where(
             and(
-                eq(
-                    automationTriggers.id,
-                    triggerId,
-                ),
-                eq(
-                    automationTriggers.automationId,
-                    automationId,
-                ),
+                eq(automationTriggers.id, triggerId),
+                eq(automationTriggers.automationId, automationId),
             ),
         )
         .returning();
 
     return result[0] ?? null;
+}
+
+export async function findActiveAutomationTriggers(
+    platformAccountId: string,
+) {
+    return db
+        .select({
+            automation: automations,
+            trigger: automationTriggers,
+        })
+        .from(automationTriggers)
+        .innerJoin(
+            automations,
+            eq(
+                automationTriggers.automationId,
+                automations.id,
+            ),
+        )
+        .where(
+            and(
+                eq(
+                    automations.platformAccountId,
+                    platformAccountId,
+                ),
+                eq(automations.status, "ACTIVE"),
+            ),
+        );
 }
