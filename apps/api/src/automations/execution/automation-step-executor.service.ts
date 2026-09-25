@@ -7,7 +7,7 @@ import type {
 } from "./step-executor.js";
 import type { AutomationStepResult } from "./step-results.js";
 import { InstagramService } from "../../integrations/instagram/instagram.service.js";
-import { findAutomationWithGraph } from "@engagex/db";
+import { findAutomationWithGraph, findContactIdentityById } from "@engagex/db";
 
 @Injectable()
 export class AutomationStepExecutorService implements AutomationStepExecutor {
@@ -49,10 +49,39 @@ export class AutomationStepExecutorService implements AutomationStepExecutor {
             };
         }
 
-        const recipientId =
-            typeof context.input.recipientId === "string"
-                ? context.input.recipientId
+        const contactIdentityId =
+            typeof context.input.contactIdentityId === "string"
+                ? context.input.contactIdentityId
                 : "";
+
+        if (!contactIdentityId) {
+            return {
+                type: "FAILED",
+                errorMessage: "Contact identity is missing",
+            };
+        }
+
+        const contactIdentity =
+            await findContactIdentityById(contactIdentityId);
+
+        if (!contactIdentity) {
+            return {
+                type: "FAILED",
+                errorMessage: "Contact identity not found",
+            };
+        }
+
+        if (
+            contactIdentity.platformAccountId !==
+            context.platformAccountId
+        ) {
+            return {
+                type: "FAILED",
+                errorMessage: "Contact identity does not belong to the Instagram account",
+            };
+        }
+
+        const recipientId = contactIdentity.externalId;
 
         if (!recipientId) {
             return {
@@ -74,13 +103,12 @@ export class AutomationStepExecutorService implements AutomationStepExecutor {
         }
 
         try {
-            const result =
-                await this.instagramService.sendMessage(
-                    context.workspaceId,
-                    context.platformAccountId,
-                    recipientId,
-                    message,
-                );
+            const result = await this.instagramService.sendMessage(
+                context.workspaceId,
+                context.platformAccountId,
+                recipientId,
+                message,
+            );
 
             return {
                 type: "CONTINUE",
@@ -103,12 +131,43 @@ export class AutomationStepExecutorService implements AutomationStepExecutor {
             };
         }
     }
+    
+    private getWaitDelayMs(config: Record<string, unknown>): number {
+        const duration =
+            typeof config.duration === "number"
+                ? config.duration
+                : Number(config.duration ?? 0);
+
+        const unit =
+            typeof config.unit === "string"
+                ? config.unit.toUpperCase()
+                : "MINUTES";
+
+        if (!Number.isFinite(duration) || duration <= 0) {
+            throw new NotFoundException("WAIT duration must be greater than 0");
+        }
+
+        switch (unit) {
+            case "MINUTES":
+                return duration * 60 * 1000;
+
+            case "HOURS":
+                return duration * 60 * 60 * 1000;
+
+            case "DAYS":
+                return duration * 24 * 60 * 60 * 1000;
+
+            default:
+                throw new NotFoundException(`Unsupported WAIT unit: ${unit}`);
+        }
+    }
 
     private executeDryRun(step: AutomationStep, context: AutomationExecutionContext): AutomationStepResult {
         switch (step.type) {
             case "WAIT":
                 return {
                     type: "WAIT",
+                    delayMs: this.getWaitDelayMs(step.config),
                     output: {
                         dryRun: true,
                         stepType: step.type,

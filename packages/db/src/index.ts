@@ -41,3 +41,4 @@ export * from "./queries/messages.js";
 export * from "./queries/instagram-comments.js";
 export * from "./queries/contact-automation-pauses.js";
 export * from "./queries/conversation-reminders.js";
+export * from "./queries/webhook-events.js";

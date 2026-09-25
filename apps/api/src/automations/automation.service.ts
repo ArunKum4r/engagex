@@ -68,12 +68,21 @@ export class AutomationService {
         return automation;
     }
 
-    async update(workspaceId: string, automationId: string, dto: UpdateAutomationDto) {
+    async update(
+        workspaceId: string,
+        automationId: string,
+        dto: UpdateAutomationDto,
+    ) {
         await this.findOne(workspaceId, automationId);
+
         const automation = await updateAutomation(automationId, {
             name: dto.name,
             description: dto.description,
             platformAccountId: dto.platformAccountId,
+            priority: dto.priority,
+            executionPolicy: dto.executionPolicy,
+            triggerRunPolicy: dto.triggerRunPolicy,
+            cooldownSeconds: dto.cooldownSeconds,
         });
 
         if (!automation) {

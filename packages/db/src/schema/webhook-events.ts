@@ -14,6 +14,7 @@ export const webhookEvents = pgTable("webhook_events", {
     errorMessage: text("error_message"),
     receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
     processedAt: timestamp("processed_at", { withTimezone: true }),
+    metadata: jsonb("metadata"),
   },
   (table) => [
     unique("webhook_events_platform_account_event_unique").on(table.platformAccountId,table.externalEventId),

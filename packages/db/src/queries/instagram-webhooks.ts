@@ -148,16 +148,26 @@ export async function processInstagramMessageWebhook(data: {
             throw new Error("Failed to create Instagram message");
         }
 
+        let webhookEventId: string;
+
         if (existingEvent[0]) {
+            webhookEventId = existingEvent[0].id;
+
             await tx.update(webhookEvents)
                 .set({
                     status: "PROCESSED",
                     processedAt: new Date(),
                     errorMessage: null,
+                    metadata: {
+                        contactId: contact.id,
+                        contactIdentityId: identity.id,
+                        conversationId: conversation.id,
+                        messageId: message.id,
+                    },
                 })
                 .where(eq(webhookEvents.id, existingEvent[0].id));
         } else {
-            await tx.insert(webhookEvents)
+            const insertedEvent = await tx.insert(webhookEvents)
                 .values({
                     workspaceId: account.workspaceId,
                     platformAccountId: account.id,
@@ -167,11 +177,27 @@ export async function processInstagramMessageWebhook(data: {
                     payload: data.payload,
                     status: "PROCESSED",
                     processedAt: new Date(),
-                });
+                    metadata: {
+                        contactId: contact.id,
+                        contactIdentityId: identity.id,
+                        conversationId: conversation.id,
+                        messageId: message.id,
+                    },
+                })
+                .returning();
+
+            const webhookEvent = insertedEvent[0];
+
+            if (!webhookEvent) {
+                throw new Error("Failed to create Instagram webhook event");
+            }
+
+            webhookEventId = webhookEvent.id;
         }
 
         return {
             duplicate: false,
+            webhookEventId,
             contactId: contact.id,
             contactIdentityId: identity.id,
             conversationId: conversation.id,

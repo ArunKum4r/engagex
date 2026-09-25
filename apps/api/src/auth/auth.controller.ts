@@ -112,7 +112,8 @@ export class AuthController {
         response.cookie("session", result.sessionToken, {
             httpOnly: true,
             secure: process.env.NODE_ENV === "production",
-            sameSite: "lax",
+            // sameSite: "lax",
+            sameSite: "none",
             maxAge,
             path: "/",
         });

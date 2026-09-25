@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "../client.js";
 import { comments } from "../schema/comments.js";
 import { resolveInstagramContact } from "./instagram.js";
+import { webhookEvents } from "../schema/webhook-events.js";
 
 export async function processInstagramCommentWebhook(data: {
     workspaceId: string;
@@ -13,6 +14,7 @@ export async function processInstagramCommentWebhook(data: {
     text?: string | null;
     mediaId?: string | null;
     mediaType?: string | null;
+    payload: Record<string, unknown>;
 }) {
     const existing = await db
         .select()
@@ -61,8 +63,34 @@ export async function processInstagramCommentWebhook(data: {
         })
         .returning();
 
+    const insertedEvent = await db
+        .insert(webhookEvents)
+        .values({
+            workspaceId: data.workspaceId,
+            platformAccountId: data.platformAccountId,
+            platform: "INSTAGRAM",
+            eventType: "COMMENT",
+            externalEventId: data.externalCommentId,
+            payload: data.payload,
+            status: "PROCESSED",
+            processedAt: new Date(),
+            metadata: {
+                contactId: contact.id,
+                contactIdentityId: identity.id,
+                commentId: inserted[0]?.id ?? null,
+            },
+        })
+        .returning();
+
+    const webhookEvent = insertedEvent[0];
+
+    if (!webhookEvent) {
+        throw new Error("Failed to create Instagram comment webhook event");
+    }
+
     return {
         duplicate: false,
+        webhookEventId: webhookEvent.id,
         comment: inserted[0],
         contactId: contact.id,
         contactIdentityId: identity.id,

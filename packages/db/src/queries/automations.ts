@@ -104,6 +104,14 @@ export async function updateAutomation(
         name?: string;
         description?: string;
         platformAccountId?: string;
+        priority?: number;
+        executionPolicy?: "EXCLUSIVE" | "ALLOW_MULTIPLE";
+        triggerRunPolicy?:
+            | "EVERY_EVENT"
+            | "ONCE_PER_CONTACT"
+            | "ONCE_PER_CONVERSATION"
+            | "COOLDOWN";
+        cooldownSeconds?: number | null;
     },
 ) {
     const result = await db

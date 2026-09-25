@@ -10,6 +10,7 @@ import { SubscriptionsModule } from "./subscriptions/subscriptions.module.js";
 import { ContactsModule } from "./contacts/contacts.module.js";
 import { MessagingModule } from "./messaging/messaging.module.js";
 import { ConversationsModule } from "./conversations/conversations.module.js";
+import { QueueModule } from "./queue/queue.module.js";
 
 @Module({
     imports: [
@@ -22,7 +23,8 @@ import { ConversationsModule } from "./conversations/conversations.module.js";
         SubscriptionsModule,
         ContactsModule,
         MessagingModule,
-        ConversationsModule
+        ConversationsModule,
+        QueueModule
     ],
 })
 export class AppModule { }
