@@ -10,6 +10,7 @@ export type AutomationStepResult =
       }
     | {
           type: "WAIT";
+          delayMs: number;
           output?: Record<string, unknown>;
       }
     | {

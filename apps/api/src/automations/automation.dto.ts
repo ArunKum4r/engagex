@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { IsArray, IsInt, IsISO8601, IsNotEmpty, IsNumber, IsObject, IsOptional, IsString, IsUUID, MaxLength, Min, ValidateNested } from "class-validator";
+import { IsArray, IsIn, IsInt, IsISO8601, IsNotEmpty, IsNumber, IsObject, IsOptional, IsString, IsUUID, MaxLength, Min, ValidateNested } from "class-validator";
 import { Type } from "class-transformer";
 
 export class CreateAutomationDto {
@@ -50,6 +50,53 @@ export class UpdateAutomationDto {
     @IsOptional()
     @IsUUID()
     platformAccountId?: string;
+
+    @ApiPropertyOptional({
+        example: 10,
+        description: "Automation priority. Higher values run first.",
+    })
+    @IsOptional()
+    @IsInt()
+    priority?: number;
+
+    @ApiPropertyOptional({
+        enum: ["EXCLUSIVE", "ALLOW_MULTIPLE"],
+        example: "EXCLUSIVE",
+    })
+    @IsOptional()
+    @IsIn(["EXCLUSIVE", "ALLOW_MULTIPLE"])
+    executionPolicy?: "EXCLUSIVE" | "ALLOW_MULTIPLE";
+
+    @ApiPropertyOptional({
+        enum: [
+            "EVERY_EVENT",
+            "ONCE_PER_CONTACT",
+            "ONCE_PER_CONVERSATION",
+            "COOLDOWN",
+        ],
+        example: "EVERY_EVENT",
+    })
+    @IsOptional()
+    @IsIn([
+        "EVERY_EVENT",
+        "ONCE_PER_CONTACT",
+        "ONCE_PER_CONVERSATION",
+        "COOLDOWN",
+    ])
+    triggerRunPolicy?:
+        | "EVERY_EVENT"
+        | "ONCE_PER_CONTACT"
+        | "ONCE_PER_CONVERSATION"
+        | "COOLDOWN";
+
+    @ApiPropertyOptional({
+        example: 3600,
+        description: "Cooldown duration in seconds.",
+    })
+    @IsOptional()
+    @IsInt()
+    @Min(1)
+    cooldownSeconds?: number | null;
 }
 
 export class AutomationResponseDto {

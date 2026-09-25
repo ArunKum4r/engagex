@@ -70,6 +70,19 @@ const NodeConfigPanel = ({
                 capability.type === triggerType,
         );
 
+    const fallbackTriggerConfigType =
+        triggerType === "INSTAGRAM_COMMENT"
+            ? "COMMENT"
+            : triggerType === "INSTAGRAM_DM"
+                ? "MESSAGE_KEYWORDS"
+                : triggerType === "INSTAGRAM_STORY_REPLY"
+                    ? "STORY_REPLY"
+                    : undefined;
+
+    const triggerConfigType =
+        triggerCapability?.configType ??
+        fallbackTriggerConfigType;
+
     const capability = isTrigger
         ? triggerCapability
         : stepCapability;
@@ -148,7 +161,7 @@ const NodeConfigPanel = ({
     ]);
 
     const renderTriggerContent = () => {
-        if (!triggerCapability?.configType) {
+        if (!triggerConfigType) {
             return (
                 <div className="rounded-xl border border-border bg-surface-muted p-4">
                     <p className="text-sm text-text-secondary">
@@ -165,9 +178,10 @@ const NodeConfigPanel = ({
             triggerType,
             platformCapabilities,
             triggerCapability,
+            triggerConfigType,
         });
 
-        switch (triggerCapability.configType) {
+        switch (triggerConfigType) {
             case "MESSAGE_KEYWORDS": {
                 const keywords = Array.isArray(config.keywords)
                     ? config.keywords.filter(
@@ -1467,7 +1481,14 @@ const NodeConfigPanel = ({
     };
 
     return (
-        <aside className="absolute inset-x-2 bottom-2 top-2 z-20 flex flex-col rounded-2xl border border-border bg-surface shadow-2xl sm:inset-y-0 sm:left-auto sm:right-0 sm:w-[340px] sm:rounded-none sm:rounded-l-2xl sm:border-y-0 sm:border-r-0 sm:border-l">
+        <>
+            <div
+                className="fixed inset-0 z-[90] bg-black/50 sm:hidden"
+                onClick={onClose}
+                aria-hidden="true"
+            />
+
+            <aside className="fixed inset-x-0 bottom-0 z-[100] flex max-h-[88dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-border bg-surface shadow-2xl sm:absolute sm:inset-y-0 sm:bottom-auto sm:left-auto sm:right-0 sm:max-h-none sm:w-[340px] sm:rounded-none sm:rounded-l-2xl sm:border-y-0 sm:border-r-0 sm:border-l">
             <div className="flex items-center justify-between border-b border-border bg-surface/95 px-4 py-4 backdrop-blur">
                 <div>
                     <p className="text-xs font-medium uppercase tracking-wide text-primary">
@@ -1498,10 +1519,11 @@ const NodeConfigPanel = ({
                 </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 sm:p-5">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 [touch-action:pan-y] sm:p-5">
                 {renderContent()}
             </div>
         </aside>
+        </>
     );
 };
 

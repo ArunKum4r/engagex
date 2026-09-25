@@ -45,14 +45,26 @@ const nodeTypes = {
     step: StepNode,
 };
 
-const createNodeId = () => `new-step-${crypto.randomUUID()}`;
+const createId = () => {
+    if (
+        typeof crypto !== "undefined" &&
+        typeof crypto.randomUUID === "function"
+    ) {
+        return crypto.randomUUID();
+    }
 
-const createEdgeId = () => `edge-${crypto.randomUUID()}`;
+    return `${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2, 11)}`;
+};
+
+const createNodeId = () => `new-step-${createId()}`;
+
+const createEdgeId = () => `edge-${createId()}`;
 
 const AutomationBuilder = ({ workspaceId, automationId, editable = false }: AutomationBuilderProps) => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [validationError, setValidationError] = useState<string | null>(null);
     const [showAddStep, setShowAddStep] = useState(false);
     const [showTriggerSelector, setShowTriggerSelector] = useState(false);
     const [selectedNode, setSelectedNode] = useState<Node | null>(null);
@@ -123,7 +135,6 @@ const AutomationBuilder = ({ workspaceId, automationId, editable = false }: Auto
             initializedRef.current = false;
             hasUserChangesRef.current = false;
             dirtyRef.current = false;
-            setValidationError(null);
 
             const data = await getAutomationGraph(
                 workspaceId,
@@ -463,7 +474,6 @@ const AutomationBuilder = ({ workspaceId, automationId, editable = false }: Auto
             const validationErrors = validateGraph();
 
             if (validationErrors.length > 0) {
-                setValidationError(validationErrors.join(" "));
                 return;
             }
 
@@ -705,7 +715,6 @@ const AutomationBuilder = ({ workspaceId, automationId, editable = false }: Auto
     const handleAddStep = useCallback(
         (type: string) => {
             hasUserChangesRef.current = true;
-            setValidationError(null);
             const stepNodes = getStepNodes();
 
             /*
@@ -1084,8 +1093,7 @@ const AutomationBuilder = ({ workspaceId, automationId, editable = false }: Auto
         (changes: Parameters<typeof onEdgesChange>[0]) => {
             if (changes.length > 0) {
                 hasUserChangesRef.current = true;
-                setValidationError(null);
-            }
+                }
 
             onEdgesChange(changes);
         },
@@ -1106,8 +1114,19 @@ const AutomationBuilder = ({ workspaceId, automationId, editable = false }: Auto
                     selectedNodeIdRef.current =
                         node.id;
 
-                    setSelectedNode(node);
-                    setShowTriggerSelector(true);
+                    setShowAddStep(false);
+
+                    const isPlaceholder =
+                        node.data?.isPlaceholder === true ||
+                        !trigger;
+
+                    if (isPlaceholder) {
+                        setSelectedNode(null);
+                        setShowTriggerSelector(true);
+                    } else {
+                        setShowTriggerSelector(false);
+                        setSelectedNode(node);
+                    }
 
                     return;
                 }
@@ -1135,8 +1154,7 @@ const AutomationBuilder = ({ workspaceId, automationId, editable = false }: Auto
                 >,
             ) => {
                 hasUserChangesRef.current = true;
-                setValidationError(null);
-                setNodes(
+                    setNodes(
                     (currentNodes) =>
                         currentNodes.map(
                             (node) =>
@@ -1218,8 +1236,7 @@ const AutomationBuilder = ({ workspaceId, automationId, editable = false }: Auto
                 >;
             }) => {
                 hasUserChangesRef.current = true;
-                setValidationError(null);
-                const existingTrigger =
+                    const existingTrigger =
                     trigger;
 
                 /*
@@ -1231,7 +1248,7 @@ const AutomationBuilder = ({ workspaceId, automationId, editable = false }: Auto
                  */
                 const triggerId =
                     existingTrigger?.id ??
-                    crypto.randomUUID();
+                    createId();
 
                 const nextTrigger =
                     existingTrigger
@@ -1352,21 +1369,16 @@ const AutomationBuilder = ({ workspaceId, automationId, editable = false }: Auto
     }
 
     return (
-        <div className="relative h-[560px] min-w-0 w-full overflow-hidden rounded-2xl border border-border bg-surface shadow-sm sm:h-[640px] lg:h-[740px]">
-            {editable && validationError && (
-                <div className="absolute left-1/2 top-5 z-30 w-[min(720px,calc(100%-32px))] -translate-x-1/2 rounded-xl border border-danger/20 bg-danger/5 px-4 py-3 text-sm text-danger shadow-lg backdrop-blur">
-                    {validationError}
-                </div>
-            )}
+        <div className="relative h-[calc(100dvh-190px)] min-h-0 min-w-0 w-full overflow-hidden rounded-2xl border border-border bg-surface shadow-sm sm:h-[640px] sm:min-h-0 lg:h-[740px]">
             {editable && (
                 <div className="absolute left-2 right-2 top-2 z-20 flex items-center justify-between gap-2 rounded-xl border border-border bg-surface/95 p-1.5 shadow-lg backdrop-blur sm:left-5 sm:right-auto sm:top-5">
                     <button
                         type="button"
-                        onClick={() =>
-                            setShowTriggerSelector(
-                                true,
-                            )
-                        }
+                        onClick={() => {
+                            setSelectedNode(null);
+                            setShowAddStep(false);
+                            setShowTriggerSelector(true);
+                        }}
                         className="rounded-lg px-3 py-2 text-xs font-medium text-text-secondary transition-colors hover:bg-surface-muted hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                     >
                         Trigger
@@ -1374,12 +1386,11 @@ const AutomationBuilder = ({ workspaceId, automationId, editable = false }: Auto
 
                     <button
                         type="button"
-                        onClick={() =>
-                            setShowAddStep(
-                                (current) =>
-                                    !current,
-                            )
-                        }
+                        onClick={() => {
+                            setSelectedNode(null);
+                            setShowTriggerSelector(false);
+                            setShowAddStep((current) => !current);
+                        }}
                         className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                     >
                         + Add step
@@ -1398,9 +1409,7 @@ const AutomationBuilder = ({ workspaceId, automationId, editable = false }: Auto
                             handleTriggerSelect
                         }
                         onClose={() =>
-                            setShowTriggerSelector(
-                                false,
-                            )
+                            setShowTriggerSelector(false)
                         }
                     platform={platform}
                     />
@@ -1409,10 +1418,9 @@ const AutomationBuilder = ({ workspaceId, automationId, editable = false }: Auto
             {editable &&
                 showAddStep && (
                     <AddStepMenu
-                        onAddStep={
-                            handleAddStep
-                        }
-                    platform={platform}
+                        onAddStep={handleAddStep}
+                        onClose={() => setShowAddStep(false)}
+                        platform={platform}
                     />
                 )}
 

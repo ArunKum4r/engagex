@@ -2,6 +2,15 @@ import { and, eq } from "drizzle-orm";
 import { db } from "../client.js";
 import { messages } from "../schema/messages.js";
 
+export async function findMessageById(messageId: string) {
+    const result = await db.select()
+        .from(messages)
+        .where(eq(messages.id, messageId))
+        .limit(1);
+
+    return result[0] ?? null;
+}
+
 export async function findMessageByExternalId(
     conversationId: string,
     externalMessageId: string,

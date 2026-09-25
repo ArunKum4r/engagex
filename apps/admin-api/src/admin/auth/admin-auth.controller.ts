@@ -58,7 +58,8 @@ export class AdminAuthController {
     response.cookie("admin_session", result.sessionToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      // sameSite: "lax",
+      sameSite: "none",
       expires: result.expiresAt,
       path: "/",
     });

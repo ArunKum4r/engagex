@@ -10,7 +10,8 @@ async function bootstrap() {
 
   const allowedOrigins = [
     "http://localhost:5173",
-    "http://10.162.220.34:5173",
+    "http://10.162.220.175:5173",
+    "https://mellifluous-lolly-1d3ed4.netlify.app"
   ];
 
   app.use(cors({

@@ -24,8 +24,19 @@ const TriggerSelector = ({
         capabilities?.triggers ?? [];
 
     return (
-        <div className="absolute left-2 right-2 top-16 z-30 w-auto max-w-[calc(100%-1rem)] rounded-2xl border border-border bg-surface shadow-2xl sm:left-5 sm:right-auto sm:top-20 sm:w-[360px]">
-            <div className="flex items-center justify-between border-b border-border bg-surface/95 px-4 py-4 backdrop-blur">
+        <>
+            <div
+                className="fixed inset-0 z-[90] bg-black/50 sm:hidden"
+                onClick={onClose}
+                aria-hidden="true"
+            />
+
+            <div
+                className="fixed inset-x-0 bottom-0 z-[100] flex max-h-[88dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-border bg-surface shadow-2xl sm:absolute sm:bottom-auto sm:left-5 sm:right-auto sm:top-20 sm:max-h-[calc(100%-5rem)] sm:w-[360px] sm:rounded-2xl"
+                onPointerDownCapture={(event) => event.stopPropagation()}
+                onWheelCapture={(event) => event.stopPropagation()}
+            >
+                <div className="flex shrink-0 items-center justify-between border-b border-border bg-surface/95 px-4 py-4 backdrop-blur">
                 <div>
                     <p className="text-xs font-semibold uppercase tracking-wider text-primary">
                         Trigger
@@ -44,9 +55,15 @@ const TriggerSelector = ({
                 >
                     <X size={17} />
                 </button>
-            </div>
+                </div>
 
-            <div className="space-y-2 p-3">
+                <div
+                    className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 [touch-action:pan-y]"
+                    onWheel={(event) => event.stopPropagation()}
+                    onWheelCapture={(event) => event.stopPropagation()}
+                    onPointerDownCapture={(event) => event.stopPropagation()}
+                >
+                    <div className="space-y-2">
                 {triggers.map((trigger) => {
                     const Icon =
                         trigger.icon;
@@ -95,8 +112,10 @@ const TriggerSelector = ({
                         </button>
                     );
                 })}
+                    </div>
+                </div>
             </div>
-        </div>
+        </>
     );
 };
 

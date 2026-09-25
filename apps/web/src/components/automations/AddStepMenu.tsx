@@ -4,18 +4,20 @@ import { getPlatformCapabilities } from "./capabilities/index";
 interface AddStepMenuProps {
     platform: string | null;
     onAddStep: (type: string) => void;
+    onClose?: () => void;
 }
 
 const AddStepMenu = ({
     platform,
     onAddStep,
+    onClose,
 }: AddStepMenuProps) => {
     const capabilities =
         getPlatformCapabilities(platform);
 
     if (!capabilities) {
         return (
-            <div className="absolute left-2 right-2 top-16 z-30 rounded-2xl border border-border bg-surface p-5 shadow-2xl sm:left-5 sm:right-auto sm:top-20 sm:w-[360px]">
+            <div className="fixed inset-x-0 bottom-0 z-[100] max-h-[88dvh] overflow-y-auto rounded-t-2xl border border-border bg-surface p-5 shadow-2xl overscroll-contain [touch-action:pan-y] sm:absolute sm:bottom-auto sm:left-5 sm:right-auto sm:top-20 sm:max-h-[calc(100%-5rem)] sm:w-[360px] sm:rounded-2xl">
                 <p className="text-sm font-medium text-text">
                     Platform not available
                 </p>
@@ -44,7 +46,18 @@ const AddStepMenu = ({
     ].filter((group) => group.items.length > 0);
 
     return (
-        <div className="absolute left-2 right-2 top-16 z-30 max-h-[min(520px,calc(100%-5rem))] overflow-y-auto rounded-2xl border border-border bg-surface shadow-2xl sm:left-5 sm:right-auto sm:top-20 sm:w-[360px]">
+        <>
+            <div
+                className="fixed inset-0 z-[90] bg-black/50 sm:hidden"
+                onClick={onClose}
+                aria-hidden="true"
+            />
+
+            <div
+                className="fixed inset-x-0 bottom-0 z-[100] flex max-h-[88dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-border bg-surface shadow-2xl sm:absolute sm:bottom-auto sm:left-5 sm:right-auto sm:top-20 sm:max-h-[calc(100%-5rem)] sm:w-[360px] sm:rounded-2xl"
+                onPointerDownCapture={(event) => event.stopPropagation()}
+                onWheelCapture={(event) => event.stopPropagation()}
+            >
             <div className="sticky top-0 z-10 border-b border-border bg-surface/95 px-4 py-4 backdrop-blur-xl sm:px-5">
                 <div className="flex items-center gap-3">
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-primary/15 bg-primary/10 text-primary shadow-sm">
@@ -54,7 +67,7 @@ const AddStepMenu = ({
                         />
                     </div>
 
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                         <p className="text-sm font-semibold text-text">
                             Add step
                         </p>
@@ -63,10 +76,27 @@ const AddStepMenu = ({
                             Choose what happens next
                         </p>
                     </div>
+
+                    {onClose && (
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-text-secondary transition-colors hover:bg-surface-muted hover:text-text sm:hidden"
+                            aria-label="Close add step menu"
+                        >
+                            ×
+                        </button>
+                    )}
                 </div>
             </div>
 
-            <div className="space-y-6 p-3 sm:p-4">
+            <div
+                className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-4"
+                onWheel={(event) => event.stopPropagation()}
+                onWheelCapture={(event) => event.stopPropagation()}
+                onPointerDownCapture={(event) => event.stopPropagation()}
+            >
+                <div className="space-y-6">
                 {stepGroups.map((group) => (
                     <div key={group.label}>
                         <div className="mb-2 flex items-center gap-2 px-2">
@@ -118,8 +148,10 @@ const AddStepMenu = ({
                         </div>
                     </div>
                 ))}
+                </div>
             </div>
-        </div>
+            </div>
+        </>
     );
 };
 

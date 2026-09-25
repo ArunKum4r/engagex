@@ -17,6 +17,17 @@ export async function findContactIdentity(
     return result[0] ?? null;
 }
 
+export async function findContactIdentityById(
+    identityId: string,
+) {
+    const result = await db.select()
+        .from(contactIdentities)
+        .where(eq(contactIdentities.id, identityId))
+        .limit(1);
+
+    return result[0] ?? null;
+}
+
 export async function createContactIdentity(data: {
     workspaceId: string;
     contactId: string;

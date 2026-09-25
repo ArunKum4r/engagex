@@ -6,20 +6,15 @@ import {
     Req,
     Res,
 } from "@nestjs/common";
-
 import type { Request, Response } from "express";
-
-import {
-    processInstagramMessageWebhook,
-} from "@engagex/db";
 import { InstagramService } from "./instagram.service.js";
-import { AutomationExecutionService } from "../../automations/execution/automation-execution.service.js";
+import { QueueService } from "../../queue/queue.service.js";
 
 @Controller("integrations/instagram/webhook")
 export class InstagramWebhookController {
     constructor(
         private readonly instagramService: InstagramService,
-        private readonly automationExecutionService: AutomationExecutionService
+        private readonly queueService: QueueService
     ) {}
     @Get()
     verify(
@@ -103,12 +98,8 @@ export class InstagramWebhookController {
                 const senderId = messaging.sender?.id;
                 const recipientId = messaging.recipient?.id;
                 const messageId = messaging.message?.mid;
-                const storyReply =
-                    messaging.message?.reply_to?.story;
-
-                const isEcho =
-                    messaging.message?.is_echo === true;
-
+                const storyReply = messaging.message?.reply_to?.story;
+                const isEcho = messaging.message?.is_echo === true;
                 const eventType = storyReply
                     ? "INSTAGRAM_STORY_REPLY"
                     : "INSTAGRAM_DM";
@@ -133,25 +124,12 @@ export class InstagramWebhookController {
                     result,
                 );
 
-                if (!result.duplicate && !isEcho) {
-                    await this.automationExecutionService.executeFromTrigger(
-                        result.platformAccountId,
-                        {
-                            recipientId: senderId,
-                            senderId,
-                            message: messaging.message?.text ?? "",
-                            contactId: result.contactId,
-                            contactIdentityId:
-                                result.contactIdentityId,
-                            conversationId:
-                                result.conversationId,
-                            messageId: result.messageId,
-                            storyId: storyReply?.id ?? null,
-                            storyUrl: storyReply?.url ?? null,
-                        },
-                        false,
+                if (!result.duplicate && !isEcho && result.webhookEventId) {
+                    await this.queueService.enqueueAutomationTrigger({
+                        webhookEventId: result.webhookEventId,
+                        platformAccountId: result.platformAccountId,
                         eventType,
-                    );
+                    });
                 }
             }
 
@@ -180,25 +158,12 @@ export class InstagramWebhookController {
                         mediaType: comment.media?.media_product_type,
                     });
                 
-                if (!result.duplicate) {
-                    console.log("Executing Instagram comment automation:", {
+                if (!result.duplicate && result.webhookEventId) {
+                    await this.queueService.enqueueAutomationTrigger({
+                        webhookEventId: result.webhookEventId,
                         platformAccountId: result.comment.platformAccountId,
-                        comment: comment.text ?? "",
+                        eventType: "INSTAGRAM_COMMENT",
                     });
-
-                    await this.automationExecutionService.executeFromTrigger(
-                        result.comment.platformAccountId,
-                        {
-                            recipientId: senderId,
-                            senderId,
-                            message: comment.text ?? "",
-                            commentId,
-                            mediaId: comment.media?.id,
-                            mediaType: comment.media?.media_product_type,
-                            contactId: result.contactId,
-                        },
-                        false,
-                    );
                 }
 
                 console.log("Instagram comment processed:", result);
